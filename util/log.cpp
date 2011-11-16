@@ -169,5 +169,6 @@ namespace mongo {
 
     // done *before* static initialization
     FILE* Logstream::logfile = stdout;
+    bool Logstream::isSyslog = false;
 
 }

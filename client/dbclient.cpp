@@ -28,6 +28,7 @@
 #include "connpool.h"
 #include "../s/util.h"
 #include "syncclusterconnection.h"
+#include "../util/timer.h"
 
 namespace mongo {
 
@@ -954,12 +955,17 @@ namespace mongo {
         */
         checkConnection();
         try {
+            Timer t;
             if ( !port().call(toSend, response) ) {
                 _failed = true;
                 if ( assertOk )
                     uasserted( 10278 , str::stream() << "dbclient error communicating with server: " << getServerAddress() );
 
                 return false;
+            }
+            int elapsed = t.millis();
+            if ( elapsed >= 100 ) {
+              log() << "DBClientConnection::call on " << getServerAddress() << " took " << elapsed << " ms" << endl;
             }
         }
         catch( SocketException & ) {

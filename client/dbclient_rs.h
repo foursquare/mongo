@@ -143,9 +143,13 @@ namespace mongo {
         struct Node {
             Node( const HostAndPort& a , DBClientConnection* c ) 
                 : addr( a ) , conn(c) , ok(true) , 
-                  ismaster(false), secondary( false ) , hidden( false ) , pingTimeMillis(0) {
+                  ismaster(false), secondary( false ) , hidden( false ) , pingTimeMillis(0), queueSize(0) {
             }
-
+            
+            bool okPingAndQueue() const {
+              return (pingTimeMillis < 100) && (queueSize < 20);
+            }
+            
             bool okForSecondaryQueries() const {
                 return ok && secondary && ! hidden;
             }
@@ -155,6 +159,8 @@ namespace mongo {
                              "isMaster" << ismaster <<
                              "secondary" << secondary <<
                              "hidden" << hidden <<
+                             "pingTimeInMillis" << pingTimeMillis <<
+                             "queueSize" << queueSize <<
                              "ok" << ok );
             }
 
@@ -178,6 +184,7 @@ namespace mongo {
             bool hidden;
             
             int pingTimeMillis;
+            int queueSize;
 
         };
 

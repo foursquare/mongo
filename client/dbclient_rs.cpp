@@ -274,6 +274,9 @@ namespace mongo {
         for ( unsigned ii = 0; ii < _nodes.size(); ii++ ) {
             _nextSlave = ( _nextSlave + 1 ) % _nodes.size();
             if ( _nextSlave != _master ) {
+                if ( !_nodes[ _nextSlave].okPingAndQueue() ) {
+                  LOG(1) << "dbclient_rs okPingAndQueue false " << _nodes[_nextSlave] << endl;
+                }
                 if ( _nodes[ _nextSlave ].okForSecondaryQueries() )
                     return _nodes[ _nextSlave ].addr;
                 LOG(2) << "dbclient_rs getSlave not selecting " << _nodes[_nextSlave] << ", not currently okForSecondaryQueries" << endl;
@@ -463,10 +466,21 @@ namespace mongo {
         try {
             Timer t;
             BSONObj o;
-            c->isMaster(isMaster, &o);
-            if ( o["setName"].type() != String || o["setName"].String() != _name ) {
+            c->serverStatus(&o);
+            
+            if ( !(o.hasField("repl") && o["repl"].type() == Object) ) {
+                warning() << "node: " << c->getServerAddress() << " isn't a part of any replica set: "
+                          << " serverStatus: " << o << endl;
+                if ( nodesOffset >= 0 )
+                    _nodes[nodesOffset].ok = false;
+                return false;
+            }
+            
+            BSONObj repl = o["repl"].embeddedObject();
+            
+            if ( repl["setName"].type() != String || repl["setName"].String() != _name ) {
                 warning() << "node: " << c->getServerAddress() << " isn't a part of set: " << _name 
-                          << " ismaster: " << o << endl;
+                          << " ismaster: " << repl << endl;
                 if ( nodesOffset >= 0 )
                     _nodes[nodesOffset].ok = false;
                 return false;
@@ -474,26 +488,30 @@ namespace mongo {
 
             if ( nodesOffset >= 0 ) {
                 _nodes[nodesOffset].pingTimeMillis = t.millis();
-                _nodes[nodesOffset].hidden = o["hidden"].trueValue();
-                _nodes[nodesOffset].secondary = o["secondary"].trueValue();
-                _nodes[nodesOffset].ismaster = o["ismaster"].trueValue();
+                _nodes[nodesOffset].hidden = repl["hidden"].trueValue();
+                _nodes[nodesOffset].secondary = repl["secondary"].trueValue();
+                _nodes[nodesOffset].ismaster = repl["ismaster"].trueValue();
+                isMaster = _nodes[nodesOffset].ismaster;
+                if ( o.hasField("globalLock") ){
+                  _nodes[nodesOffset].queueSize = o["globalLock"].embeddedObject()["currentQueue"].embeddedObject()["total"].numberInt();
+                }
 
-                _nodes[nodesOffset].lastIsMaster = o.copy();
+                _nodes[nodesOffset].lastIsMaster = repl.copy();
             }
 
-            log( ! verbose ) << "ReplicaSetMonitor::_checkConnection: " << c->toString() << ' ' << o << endl;
+            log( ! verbose ) << "ReplicaSetMonitor::_checkConnection: " << c->toString() << ' ' << repl << endl;
             
             // add other nodes
             BSONArrayBuilder b;
-            if ( o["hosts"].type() == Array ) {
-                if ( o["primary"].type() == String )
-                    maybePrimary = o["primary"].String();
+            if ( repl["hosts"].type() == Array ) {
+                if ( repl["primary"].type() == String )
+                    maybePrimary = repl["primary"].String();
 
-                BSONObjIterator it( o["hosts"].Obj() );
+                BSONObjIterator it( repl["hosts"].Obj() );
                 while( it.more() ) b.append( it.next() );
             }
-            if (o.hasField("passives") && o["passives"].type() == Array) {
-                BSONObjIterator it( o["passives"].Obj() );
+            if (repl.hasField("passives") && repl["passives"].type() == Array) {
+                BSONObjIterator it( repl["passives"].Obj() );
                 while( it.more() ) b.append( it.next() );
             }
             
@@ -613,7 +631,8 @@ namespace mongo {
                                 "ismaster" << _nodes[i].ismaster <<
                                 "hidden" << _nodes[i].hidden <<
                                 "secondary" << _nodes[i].secondary <<
-                                "pingTimeMillis" << _nodes[i].pingTimeMillis  ) );
+                                "pingTimeMillis" << _nodes[i].pingTimeMillis <<
+                                "queueSize" << _nodes[i].queueSize  ) );
             
         }
         hosts.done();

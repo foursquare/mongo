@@ -33,6 +33,7 @@ using namespace std;
 //#include "../db/jsobj.h"
 
 namespace mongo {
+    bool progress_meter_use_stdout = true;
 
     Nullstream nullstream;
     vector<Tee*>* Logstream::globalTees = 0;

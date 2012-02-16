@@ -156,19 +156,21 @@ namespace mongo {
 #else
     typedef void *HANDLE;
 #endif
-
+    extern bool progress_meter_use_stdout;
     class ProgressMeter : boost::noncopyable {
     public:
         ProgressMeter( unsigned long long total , int secondsBetween = 3 , int checkInterval = 100 , string units = "" ) : _units(units) {
             reset( total , secondsBetween , checkInterval );
+            _useStdout = progress_meter_use_stdout;
         }
 
         ProgressMeter() {
             _active = 0;
             _units = "";
+            _useStdout = progress_meter_use_stdout;
         }
 
-        // typically you do ProgressMeterHolder
+	// typically you do ProgressMeterHolder
         void reset( unsigned long long total , int secondsBetween = 3 , int checkInterval = 100 ) {
             _total = total;
             _secondsBetween = secondsBetween;
@@ -210,13 +212,13 @@ namespace mongo {
 
             if ( _total > 0 ) {
                 int per = (int)( ( (double)_done * 100.0 ) / (double)_total );
-                cout << "\t\t" << _done << "/" << _total << "\t" << per << "%";
+                _useStdout ? cout : cerr << "\t\t" << _done << "/" << _total << "\t" << per << "%";
 
                 if ( ! _units.empty() ) {
-                    cout << "\t(" << _units << ")" << endl;
+                    _useStdout ? cout : cerr << "\t(" << _units << ")" << endl;
                 }
                 else {
-                    cout << endl;
+                    _useStdout ? cout : cerr << endl;
                 }
             }
             _lastTime = t;
@@ -266,6 +268,7 @@ namespace mongo {
         int _lastTime;
 
         string _units;
+	bool _useStdout;
     };
 
     // e.g.: 

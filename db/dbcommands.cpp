@@ -581,6 +581,7 @@ namespace mongo {
             timeBuilder.appendNumber( "after repl" , Listener::getElapsedTimeMillis() - start );
 
             result.append( "opcounters" , globalOpCounters.getObj() );
+            nsOpCounters.getObj( result );
 
             {
                 BSONObjBuilder asserts( result.subobjStart( "asserts" ) );

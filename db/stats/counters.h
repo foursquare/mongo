@@ -17,6 +17,8 @@
 
 #pragma once
 
+#include <map>
+#include <string>
 #include "../../pch.h"
 #include "../jsobj.h"
 #include "../../util/net/message.h"
@@ -68,6 +70,48 @@ namespace mongo {
 
     extern OpCounters globalOpCounters;
     extern OpCounters replOpCounters;
+    
+    
+    /**
+     * for storing operation counters per collection
+     * note: not thread safe.  ok with that for speed
+     */
+    class NsOpCounters {
+    public:
+
+        NsOpCounters();
+
+        AtomicUInt * getInsert(const StringData& ns);
+        AtomicUInt * getQuery(const StringData& ns);
+        AtomicUInt * getUpdate(const StringData& ns);
+        AtomicUInt * getDelete(const StringData& ns);
+
+        void incInsertInWriteLock(const StringData& ns, int n);
+        void gotInsert(const StringData& ns);
+        void gotQuery(const StringData& ns);
+        void gotUpdate(const StringData& ns);
+        void gotDelete(const StringData& ns);
+
+
+        void gotOp( const StringData& ns , int op , bool isCommand );
+
+        void getObj( BSONObjBuilder& b );
+
+    private:
+        std::map<std::string, shared_ptr<OpCounters> > _nsCounterMap;
+        
+        OpCounters * counterFor(const StringData & ns ) {
+          std::string key(ns.data());
+          shared_ptr<OpCounters>  oc_ptr = _nsCounterMap[key];
+          if ( oc_ptr == NULL ) {
+            oc_ptr = shared_ptr<OpCounters>( new OpCounters() );
+            _nsCounterMap[key] = oc_ptr;
+          }
+          return oc_ptr.get();
+        }
+    };
+    
+    extern NsOpCounters nsOpCounters;
 
 
     class IndexCounters {

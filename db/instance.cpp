@@ -267,6 +267,7 @@ namespace mongo {
         }
 
         globalOpCounters.gotOp( op , isCommand );
+        nsOpCounters.gotOp( ns , op , isCommand );
 
         Client& c = cc();
 
@@ -597,6 +598,7 @@ namespace mongo {
             } catch (const UserException&) {
                 if (!keepGoing || !d.moreJSObjs()){
                     globalOpCounters.incInsertInWriteLock(n);
+                    nsOpCounters.incInsertInWriteLock( ns , n );
                     throw;
                 }
                 // otherwise ignore and keep going
@@ -635,6 +637,7 @@ namespace mongo {
 
         checkAndInsert(ns, js);
         globalOpCounters.incInsertInWriteLock(1);
+        nsOpCounters.incInsertInWriteLock( ns , 1 );
     }
 
     void getDatabaseNames( vector< string > &names , const string& usePath ) {

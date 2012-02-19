@@ -86,6 +86,56 @@ namespace mongo {
         }
         return _obj;
     }
+    
+    NsOpCounters::NsOpCounters() {
+      
+    }
+
+    AtomicUInt * NsOpCounters::getInsert(const StringData& ns) {
+      return counterFor(ns)->getInsert();
+    }
+    AtomicUInt * NsOpCounters::getQuery(const StringData& ns) {
+      return counterFor(ns)->getQuery();
+    }
+    AtomicUInt * NsOpCounters::getUpdate(const StringData& ns) {
+      return counterFor(ns)->getUpdate();
+    }
+    AtomicUInt * NsOpCounters::getDelete(const StringData& ns) {
+      return counterFor(ns)->getDelete();
+    }
+
+    void NsOpCounters::incInsertInWriteLock(const StringData& ns, int n) {
+      counterFor(ns)->incInsertInWriteLock(n);
+    }
+    void NsOpCounters::gotInsert(const StringData& ns) {
+      counterFor(ns)->gotInsert();
+    }
+    void NsOpCounters::gotQuery(const StringData& ns) {
+      counterFor(ns)->gotQuery();
+    }
+    void NsOpCounters::gotUpdate(const StringData& ns) {
+      counterFor(ns)->gotUpdate();
+    }
+    void NsOpCounters::gotDelete(const StringData& ns) {
+      counterFor(ns)->gotDelete();
+    }
+
+
+    void NsOpCounters::gotOp( const StringData& ns , int op , bool isCommand ) {
+      counterFor(ns)->gotOp( op , isCommand );
+    }
+
+    void NsOpCounters::getObj( BSONObjBuilder& b ) {
+      std::map<std::string, shared_ptr<OpCounters> >::iterator it;
+      BSONArrayBuilder hosts( b.subarrayStart( "opcountersNS" ) );
+      for ( it = _nsCounterMap.begin() ; it != _nsCounterMap.end(); it++ ) {
+        hosts.append( BSON (
+          "ns" << (*it).first <<
+          "opcounters" << (*it).second.get()->getObj()
+        ) );
+      }
+      hosts.done();
+    }
 
     IndexCounters::IndexCounters() {
         _memSupported = _pi.blockCheckSupported();
@@ -200,6 +250,7 @@ namespace mongo {
 
     OpCounters globalOpCounters;
     OpCounters replOpCounters;
+    NsOpCounters nsOpCounters;
     IndexCounters globalIndexCounters;
     FlushCounters globalFlushCounters;
     NetworkCounter networkCounter;

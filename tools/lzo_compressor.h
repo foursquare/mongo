@@ -1,6 +1,7 @@
 // lzo_compressor.h
 #include <stdio.h>
 #include <iostream>
+#include <time.h>
 #include "lzo/lzoconf.h"
 #include "lzo/lzo1x.h"
 
@@ -55,13 +56,41 @@ public:
         /*
          * Step 2: write magic header, flags & block size, init checksum
          */
-        block_size = 256 * 1024L;
+        block_size = 64 * 1024L;
         
         xwrite(fo, magic, sizeof(magic));
-        xwrite32(fo, flags);
-        xputc(fo, method);              /* compression method */
-        xputc(fo, compression_level);   /* compression level */
-        xwrite32(fo, block_size);
+        int lzop_version = 0x1010;
+        xwrite16(fo, lzop_version);
+        int lzo_version = 0x2060;
+        xwrite16(fo, lzo_version);
+        int lzop_compat_version = 0x0940;
+        xwrite16(fo, lzop_compat_version);
+        // lzo_strategy: LZO1X_1 
+        xwrite8(fo, 1); 
+        xwrite8(fo, 5);
+        
+        xwrite32(fo, 0); // all flags 0
+        xwrite32(fo, 0x81A4); // mode
+        xwrite32(fo, (int)time (NULL)); // mtime
+        xwrite32(fo, 0); // gmtdiff ignored
+        xwrite8(fo, 0);     // no filename
+        fflush(fo);
+        
+        unsigned int header_length = 7+2*3+1*2+4*4+1;
+        unsigned char header_data[header_length];
+        FILE* fi = fopen(out_name,"rb");
+        if(fread(header_data,1, header_length,fi) != header_length) {
+            cerr << "Failed to read header data from file" <<endl;
+            fclose(fi);
+            fclose(fo);
+            exit(1);
+        } else {
+            fclose(fi);
+        }
+        lzo_uint32 header_checksum = lzo_adler32(0, NULL, 0);
+        header_checksum = lzo_adler32(header_checksum, header_data, header_length);  
+        xwrite32(fo, header_checksum);
+
         checksum = lzo_adler32(0, NULL, 0);
         
         
@@ -106,8 +135,8 @@ public:
             xwrite32(fo, 0);
             
             /* write checksum */
-            if (flags & 1)
-                xwrite32(fo, checksum);
+//            if (flags & 1)
+//                xwrite32(fo, checksum);
             xclose(fo);
             fo = NULL;
         }
@@ -284,6 +313,22 @@ private:
         b[0] = (unsigned char) ((v >> 24) & 0xff);
         xwrite(fp, b, 4);
     }
+    
+    void xwrite16(FILE *fp, lzo_xint v) {
+        unsigned char b[2];
+        
+        b[1] = (unsigned char) ((v >>  0) & 0xff);
+        b[0] = (unsigned char) ((v >>  8) & 0xff);
+        xwrite(fp, b, 2);
+    }
+    
+    void xwrite8(FILE *fp, lzo_xint v) {
+        unsigned char b[1];
+        
+        b[0] = (unsigned char) ((v >>  0) & 0xff);
+        xwrite(fp, b, 1);
+    }
+    
 
     /* open output file */
     static FILE *xopen_fo(const char *name) {

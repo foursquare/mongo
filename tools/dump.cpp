@@ -27,8 +27,6 @@ using namespace mongo;
 
 namespace po = boost::program_options;
 
-extern bool mongo::progress_meter_use_stdout;
-
 class Dump : public Tool {
     class FilePtr : boost::noncopyable {
     public:
@@ -55,10 +53,6 @@ public:
                 // write output to standard error to avoid mangling output
                 // must happen early to avoid sending junk to stdout
                 useStandardOutput(false);
-                if (Logstream::getLogDesc() == 1) { // If stdout is the log stream
-                    Logstream::setLogFile(stderr);
-                }
-            progress_meter_use_stdout = false;
         }
     }
 

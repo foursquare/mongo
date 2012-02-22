@@ -1117,6 +1117,7 @@ for x in normalTools:
 
 #some special tools
 env.Program( "bsondump" , allToolFiles + [ "tools/bsondump.cpp" ] )
+env.Program( "bsonsplit" , allToolFiles + [ "tools/bsonsplit.cpp" ] )
 env.Program( "mongobridge" , allToolFiles + [ "tools/bridge.cpp" ] )
 
 # mongos

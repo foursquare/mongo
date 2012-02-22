@@ -1,6 +1,7 @@
 // lzo_compressor.h
 #include <stdio.h>
 #include <iostream>
+#include <time.h>
 #include "lzo/lzoconf.h"
 #include "lzo/lzo1x.h"
 
@@ -55,13 +56,52 @@ public:
         /*
          * Step 2: write magic header, flags & block size, init checksum
          */
-        block_size = 256 * 1024L;
+        block_size = 64 * 1024L;
+        vector<unsigned char> header;
         
         xwrite(fo, magic, sizeof(magic));
-        xwrite32(fo, flags);
-        xputc(fo, method);              /* compression method */
-        xputc(fo, compression_level);   /* compression level */
-        xwrite32(fo, block_size);
+        
+        int lzop_version = 0x1010;
+        xwrite16(fo, lzop_version);
+        xwrite16buffer(header, lzop_version);
+        
+        int lzo_version = 0x2060;
+        xwrite16(fo, lzo_version);
+        xwrite16buffer(header, lzo_version);
+        
+        int lzop_compat_version = 0x0940;
+        xwrite16(fo, lzop_compat_version);
+        xwrite16buffer(header, lzop_compat_version);
+        
+        
+        // lzo_strategy: LZO1X_1 
+        xwrite8(fo, 1);
+        xwrite8buffer(header, 1);
+        
+        xwrite8(fo, 5);
+        xwrite8buffer(header, 5);
+        
+        xwrite32(fo, 0); // all flags 0
+        xwrite32buffer(header, 0);
+        
+        xwrite32(fo, 0x81A4); // mode
+        xwrite32buffer(header, 0x81A4);
+        
+        int ct = (int)time(NULL);
+        xwrite32(fo, ct); // mtime
+        xwrite32buffer(header, ct);
+        
+        xwrite32(fo, 0); // gmtdiff ignored
+        xwrite32buffer(header, 0);
+        
+        xwrite8(fo, 0);     // no filename
+        xwrite8buffer(header, 0);
+        
+        lzo_uint32 header_checksum = lzo_adler32(0, NULL, 0);
+        header_checksum = lzo_adler32(header_checksum, &header.front(), header.size());  
+        
+        xwrite32(fo, header_checksum);
+
         checksum = lzo_adler32(0, NULL, 0);
         
         
@@ -106,8 +146,8 @@ public:
             xwrite32(fo, 0);
             
             /* write checksum */
-            if (flags & 1)
-                xwrite32(fo, checksum);
+//            if (flags & 1)
+//                xwrite32(fo, checksum);
             xclose(fo);
             fo = NULL;
         }
@@ -162,8 +202,8 @@ private:
     unsigned long total_out;
     lzo_bool opt_debug;
     
-    /* magic file header for lzopack-compressed files */
-    static const unsigned char magic[7];
+    /* magic file header for lzop files */
+    static const unsigned char magic[9];
     
     void compress()  {
         total_in += in_len;
@@ -248,7 +288,7 @@ private:
         total_out += (unsigned long) len;
         return len;
     }
-    
+
     int xgetc(FILE *fp) {
         unsigned char c;
         xread(fp, (lzo_voidp) &c, 1, 0);
@@ -284,6 +324,52 @@ private:
         b[0] = (unsigned char) ((v >> 24) & 0xff);
         xwrite(fp, b, 4);
     }
+    
+    void xwrite16(FILE *fp, lzo_xint v) {
+        unsigned char b[2];
+        
+        b[1] = (unsigned char) ((v >>  0) & 0xff);
+        b[0] = (unsigned char) ((v >>  8) & 0xff);
+        xwrite(fp, b, 2);
+    }
+    
+    void xwrite8(FILE *fp, lzo_xint v) {
+        unsigned char b[1];
+        
+        b[0] = (unsigned char) ((v >>  0) & 0xff);
+        xwrite(fp, b, 1);
+    }
+    
+    void xwrite32buffer(vector<unsigned char> &header, lzo_xint v) {
+        unsigned char b[4];
+        
+        b[3] = (unsigned char) ((v >>  0) & 0xff);
+        b[2] = (unsigned char) ((v >>  8) & 0xff);
+        b[1] = (unsigned char) ((v >> 16) & 0xff);
+        b[0] = (unsigned char) ((v >> 24) & 0xff);
+        header.push_back(b[0]);
+        header.push_back(b[1]);
+        header.push_back(b[2]);
+        header.push_back(b[3]);
+    }
+    
+    void xwrite16buffer(vector<unsigned char> &header, lzo_xint v) {
+        unsigned char b[2];
+        
+        b[1] = (unsigned char) ((v >>  0) & 0xff);
+        b[0] = (unsigned char) ((v >>  8) & 0xff);
+        header.push_back(b[0]);
+        header.push_back(b[1]);
+    }
+    
+    void xwrite8buffer(vector<unsigned char> &header, lzo_xint v) {
+        unsigned char b[1];
+        
+        b[0] = (unsigned char) ((v >>  0) & 0xff);
+        header.push_back(b[0]);
+    }
+    
+    
 
     /* open output file */
     static FILE *xopen_fo(const char *name) {
@@ -324,6 +410,6 @@ private:
     }
 };
 
-const unsigned char LZOCompressor::magic[] = { 0x00, 0xe9, 0x4c, 0x5a, 0x4f, 0xff, 0x1a};
+const unsigned char LZOCompressor::magic[] = { -119, 'L', 'Z', 'O', 0, '\r', '\n', '\032', '\n'};
 
 

@@ -189,17 +189,21 @@ namespace mongo {
         const T _default;
     };
 
+    extern bool progress_meter_use_stdout;
     class ProgressMeter : boost::noncopyable {
     public:
         ProgressMeter( unsigned long long total , int secondsBetween = 3 , int checkInterval = 100 ) {
             reset( total , secondsBetween , checkInterval );
+            _useStdout = progress_meter_use_stdout;
         }
 
         ProgressMeter() {
             _active = 0;
+            _units = "";
+            _useStdout = progress_meter_use_stdout;
         }
 
-        // typically you do ProgressMeterHolder
+	// typically you do ProgressMeterHolder
         void reset( unsigned long long total , int secondsBetween = 3 , int checkInterval = 100 ) {
             _total = total;
             _secondsBetween = secondsBetween;
@@ -241,7 +245,14 @@ namespace mongo {
 
             if ( _total > 0 ) {
                 int per = (int)( ( (double)_done * 100.0 ) / (double)_total );
-                cout << "\t\t" << _done << "/" << _total << "\t" << per << "%" << endl;
+                _useStdout ? cout : cerr << "\t\t" << _done << "/" << _total << "\t" << per << "%";
+
+                if ( ! _units.empty() ) {
+                    _useStdout ? cout : cerr << "\t(" << _units << ")" << endl;
+                }
+                else {
+                    _useStdout ? cout : cerr << endl;
+                }
             }
             _lastTime = t;
             return true;
@@ -279,6 +290,9 @@ namespace mongo {
         unsigned long long _done;
         unsigned long long _hits;
         int _lastTime;
+
+        string _units;
+  	    bool _useStdout;
     };
 
     // e.g.: 

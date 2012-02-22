@@ -37,6 +37,7 @@ using namespace std;
 #endif
 
 namespace mongo {
+    bool progress_meter_use_stdout = true;
 
     Nullstream nullstream;
     vector<Tee*>* Logstream::globalTees = 0;

@@ -201,7 +201,6 @@ def printLocalInfo():
 printLocalInfo()
 
 boostLibs = [ "thread" , "filesystem" , "program_options" ]
-lzoLibs = [ "lzo2" ]
 
 onlyServer = len( COMMAND_LINE_TARGETS ) == 0 or ( len( COMMAND_LINE_TARGETS ) == 1 and str( COMMAND_LINE_TARGETS[0] ) in [ "mongod" , "mongos" , "test" ] )
 nix = False
@@ -917,8 +916,6 @@ def doConfigure( myenv , shell=False ):
         myCheckLib( [ l + boostCompiler + "-mt" + boostVersion ,
                       l + boostCompiler + boostVersion ] ,
                     release or not shell)
-    for z in lzoLibs:
-	myCheckLib( [ z], release or not shell)
 
     if not conf.CheckCXXHeader( "execinfo.h" ):
         myenv.Append( CPPDEFINES=[ "NOEXECINFO" ] )

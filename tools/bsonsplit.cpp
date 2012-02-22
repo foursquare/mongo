@@ -26,8 +26,6 @@
 
 #include <fcntl.h>
 
-#include "lzo_compressor.h"
-
 using namespace mongo;
 
 namespace po = boost::program_options;
@@ -39,9 +37,6 @@ class BSONSplit : public BSONTool {
     unsigned long _byteCount;
     unsigned int _fileCount;
     FILE* _outputFile;
-    bool _compress;
-    LZOCompressor compressor;
-    
 public:
 
     BSONSplit() : BSONTool( "bsonsplit", NONE ) {
@@ -51,20 +46,16 @@ public:
         add_options()
         ("p" , po::value<string>()->default_value("x") , "prefix of output files." )
         ;
-        add_options()
-        ("c" , po::value<string>()->default_value("") , "compression level." )
-        ;
         add_hidden_options()
         ("file" , po::value<string>() , ".bson file" )
         ;
         addPositionArg( "file" , 1 );
         _noconnection = true;
-        _compress = true;
     }
 
     virtual void printExtraHelp(ostream& out) {
         out << "Split BSON file into smaller ones.\n" << endl;
-        out << "usage: " << _name << " [-b bytes][-p prefix][-c [1|9]] <bson filename>" << endl;
+        out << "usage: " << _name << " [-b bytes][-p prefix] <bson filename>" << endl;
     }
 
     long long processFile(FILE* file) {
@@ -77,7 +68,7 @@ public:
 
         while ( !feof(file) ) {
             size_t amt = fread(buf, 1, 4, file);
-            if( amt != 4) {
+            if( amt == 0) {
                 if(feof(file)){
                     break;
                 }
@@ -109,18 +100,6 @@ public:
                 _prefix = "x";
             } else {
                 _prefix = p;
-            }
-            string c = getParam( "c" );
-            if( c == "" ) {
-                _compress = false;
-            } else {
-                _compress = true;
-                int level = atoi(c.c_str());
-                if(level != 1 && level != 9) {
-                    cerr << "-c compression level: " << level << " is not 1 or 9" << endl;
-                    return 1;
-                }
-                compressor.setCompressionLevel(level);
             }
             string b = getParam( "b" );
             if(b == "") {
@@ -158,9 +137,6 @@ public:
             }
             processFile( file );
             fclose( file );
-        }
-        if(_compress) {
-            compressor.end();
         }
         if(_outputFile != NULL ) {
             fclose(_outputFile);
@@ -215,21 +191,14 @@ public:
 
     virtual void gotObject( const BSONObj& o ) {
         if( _byteCount ==0 || _byteCount > _bytes ) {
-            if(_byteCount != 0 && _compress) {
-                compressor.end();
-            }
             if(_outputFile != NULL) {
                 fclose(_outputFile);
             }
             char buffer [10];
             sprintf(buffer, "%05u", _fileCount);
-            string outputFileName = _prefix + buffer + ".bson" + (_compress ? ".lzo" : "");
-            if(!_compress) {
-                _outputFile = fopen(outputFileName.c_str(), "wb");
-                uassert(15919, errnoWithPrefix("couldn't open file"), _outputFile);
-            } else {
-                compressor.start(outputFileName.c_str());
-            }
+            string outputFileName = _prefix + buffer + ".bson";
+            _outputFile = fopen(outputFileName.c_str(), "wb");
+            uassert(15919, errnoWithPrefix("couldn't open file"), _outputFile);
             _fileCount += 1;
             _byteCount = 0;
             (_usesstdout ? cout : cerr ) << "Outputting to file: " << outputFileName << endl;
@@ -238,14 +207,8 @@ public:
         size_t toWrite = o.objsize();
         size_t written = 0;
         while( toWrite ) {
-            size_t ret = 0;
-            if(!_compress) {
-                ret = fwrite( o.objdata()+written, 1, toWrite, _outputFile );
-                uassert(15920, errnoWithPrefix("couldn't write to file"), ret);
-            } else {
-                compressor.put(o.objdata()+written, toWrite);
-                ret = toWrite;
-            }
+            size_t ret = fwrite( o.objdata()+written, 1, toWrite, _outputFile );
+            uassert(15920, errnoWithPrefix("couldn't write to file"), ret);
             toWrite -= ret;
             written += ret;
         }

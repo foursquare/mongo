@@ -32,7 +32,7 @@
 namespace mongo {
 
     const char* Mod::modNames[] = { "$inc", "$set", "$push", "$pushAll", "$pull", "$pullAll" , "$pop", "$unset" ,
-                                    "$bitand" , "$bitor" , "$bit" , "$addToSet", "$rename", "$rename"
+                                    "$bitand" , "$bitor" , "$bit" , "$addToSet", "$rename", "$rename", "$pushMax"
                                   };
     unsigned Mod::modNamesNum = sizeof(Mod::modNames)/sizeof(char*);
 
@@ -329,6 +329,38 @@ namespace mongo {
         case RENAME_TO: {
             ms.handleRename( b, shortFieldName );
             break;
+        }
+        
+        case PUSH_MAX: {
+          uassert( 15919 ,  "$pushMax needs an object" , elt.type() == Object );
+          uassert( 15920 ,  "$pushMax can only be applied to an array" , in.type() == Array );
+          
+          BSONObj eObj = elt.embeddedObject();
+          
+          int maxSize = eObj.getIntField("max");
+          BSONElement toPush = eObj.getField("data");
+          int maxDiff = maxSize - in.embeddedObject().nFields();
+            
+          uassert( 15921 , "$pushMax.max must be set to a positive integer" , maxSize > 0 );
+          uassert( 15922 , "$pushMax.data must be set" , !toPush.eoo() );
+          
+          BSONObjBuilder bb( b.subarrayStart( shortFieldName ) );
+          BSONObjIterator i( in.embeddedObject() );
+          
+          int n=0;
+          while ( i.more() ) {
+              BSONElement e = i.next();
+              if ( maxDiff > 0 ) {
+                  bb.appendAs( e , bb.numStr( n++ ) );
+              }
+              maxDiff++;
+          }
+
+          ms.pushStartSize = n;
+
+          bb.appendAs( toPush ,  bb.numStr( n ) );
+          bb.done();
+          break;
         }
 
         default:

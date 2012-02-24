@@ -67,8 +67,8 @@ namespace mongo {
      */
     struct Mod {
         // See opFromStr below
-        //        0    1    2     3         4     5          6    7      8       9       10    11        12           13
-        enum Op { INC, SET, PUSH, PUSH_ALL, PULL, PULL_ALL , POP, UNSET, BITAND, BITOR , BIT , ADDTOSET, RENAME_FROM, RENAME_TO } op;
+        //        0    1    2     3         4     5          6    7      8       9       10    11        12           13         14
+        enum Op { INC, SET, PUSH, PUSH_ALL, PULL, PULL_ALL , POP, UNSET, BITAND, BITOR , BIT , ADDTOSET, RENAME_FROM, RENAME_TO, PUSH_MAX } op;
 
         static const char* modNames[];
         static unsigned modNamesNum;
@@ -152,6 +152,7 @@ namespace mongo {
             switch (op) {
             case PUSH:
             case PUSH_ALL:
+            case PUSH_MAX:
             case POP:
                 return true;
             default:
@@ -331,6 +332,8 @@ namespace mongo {
                             return Mod::PUSH;
                         if ( fn[5] == 'A' && fn[6] == 'l' && fn[7] == 'l' && fn[8] == 0 )
                             return Mod::PUSH_ALL;
+                        if ( fn[5] == 'M' && fn[6] == 'a' && fn[7] == 'x' && fn[8] == 0 )
+                            return Mod::PUSH_MAX;
                     }
                     else if ( fn[3] == 'l' && fn[4] == 'l' ) {
                         if ( fn[5] == 0 )
@@ -579,7 +582,7 @@ namespace mongo {
             Mod& m = *((Mod*)(ms.m)); // HACK
 
             switch ( m.op ) {
-
+            
             case Mod::PUSH:
             case Mod::ADDTOSET: {
                 if ( m.isEach() ) {
@@ -590,6 +593,15 @@ namespace mongo {
                     arr.appendAs( m.elt, "0" );
                     arr.done();
                 }
+                break;
+            }
+            
+            case Mod::PUSH_MAX: {
+                BSONObjBuilder arr( b.subarrayStart( m.shortFieldName ) );
+                BSONElement data = m.elt.embeddedObject().getField("data");
+                uassert( 15923 , "$pushMax.data must be set" , !data.eoo() );
+                arr.appendAs(data , "0" );
+                arr.done();
                 break;
             }
 

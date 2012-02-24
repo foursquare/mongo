@@ -441,6 +441,24 @@ namespace UpdateTests {
             ASSERT( client().findOne( ns(), Query() ).woCompare( fromjson( "{'_id':0,a:{b:4}}" ) ) == 0 );
         }
     };
+    
+    class PushMax : public SetBase {
+    public:
+        void run() {
+            client().insert( ns(), fromjson( "{'_id':0,a:[1,2]}" ) );
+            client().update( ns(), Query(), BSON( "$pushMax" << BSON( "a" << BSON("max" << 2 << "data" << 3.0 ) ) ) );
+            ASSERT_EQUALS( client().findOne( ns(), Query() ) , fromjson( "{'_id':0,a:[2,3]}" ) );
+        }
+    };
+    
+    class PushMaxFromNothing : public SetBase {
+    public:
+        void run() {
+            client().insert( ns(), fromjson( "{'_id':0}" ) );
+            client().update( ns(), Query(), BSON( "$push" << BSON( "a" << BSON("max" << 2 << "data" << 5.0 ) ) ) );
+            ASSERT_EQUALS( client().findOne( ns(), Query() ) , fromjson( "{'_id':0,a:[5]}" ) );
+        }
+    };
 
     class CantIncParent : public SetBase {
     public:

@@ -783,6 +783,38 @@ namespace ReplTests {
                 insert( fromjson( "{'_id':0}" ) );
             }
         };
+        
+        class PushMax : public Base {
+        public:
+            void doIt() const {
+                client()->update( ns(), BSON( "_id" << 0 ), BSON( "$pushMax" << BSON( "a" << BSON( "max" << 1 << "data" << 5.0 ) ) ) );
+            }
+            using ReplTests::Base::check;
+            void check() const {
+                ASSERT_EQUALS( 1, count() );
+                check( fromjson( "{'_id':0,a:[5]}" ), one( fromjson( "{'_id':0}" ) ) );
+            }
+            void reset() const {
+                deleteAll( ns() );
+                insert( fromjson( "{'_id':0,a:[4]}" ) );
+            }
+        };
+
+        class PushMaxUpsert : public Base {
+        public:
+            void doIt() const {
+                client()->update( ns(), BSON( "_id" << 0 ), BSON( "$pushMax" << BSON( "a" << BSON( "max" << 1 << "data" << 5.0 ) ) ), true );
+            }
+            using ReplTests::Base::check;
+            void check() const {
+                ASSERT_EQUALS( 1, count() );
+                check( fromjson( "{'_id':0,a:[5]}" ), one( fromjson( "{'_id':0}" ) ) );
+            }
+            void reset() const {
+                deleteAll( ns() );
+                insert( fromjson( "{'_id':0,a:[4]}" ) );
+            }
+        };
 
         class PushAll : public Base {
         public:

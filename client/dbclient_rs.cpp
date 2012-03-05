@@ -778,10 +778,15 @@ namespace mongo {
         HostAndPort h = _monitor->getSlave( _slaveHost );
 
         if ( h == _slaveHost && _slave ) {
-            if ( ! _slave->isFailed() )
+            if ( _slave->isFailed() ) {
+                _monitor->notifySlaveFailure( _slaveHost );
+                _slaveHost = _monitor->getSlave();
+            }
+
+            if ( rand() % 100 != 0 )
                 return _slave.get();
-            _monitor->notifySlaveFailure( _slaveHost );
-            _slaveHost = _monitor->getSlave();
+
+            _slaveHost = _monitor->getSlave();  
         } 
         else {
             _slaveHost = h;

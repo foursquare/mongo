@@ -517,7 +517,7 @@ namespace mongo {
                 
                 int overhead = v - m - connTicketHolder.used();
 
-                if( overhead > 4000 ) { 
+                if( overhead > 7000 ) { 
                     t.append("note", "virtual minus mapped is large. could indicate a memory leak");
 
                     static time_t last = 0;
@@ -525,7 +525,7 @@ namespace mongo {
                     
                     if ( last + 60 < now ) {
                         last = now;
-                        log() << "warning: virtual size (" << v << "MB) - mapped size (" << m << "MB) is large (" << overhead << "MB). could indicate a memory leak" << endl;
+                        log(3) << "warning: virtual size (" << v << "MB) - mapped size (" << m << "MB) is large (" << overhead << "MB). could indicate a memory leak" << endl;
                     }
 
                 }

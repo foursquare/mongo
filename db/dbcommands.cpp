@@ -48,6 +48,7 @@
 #include "../util/version.h"
 #include "../s/d_writeback.h"
 #include "dur_stats.h"
+#include "modules/killfilewatcher.h"
 
 namespace mongo {
 
@@ -446,10 +447,13 @@ namespace mongo {
             {
                 BSONObjBuilder health;
 
-                health.append("ok", true);
+                string msg = "healthy";
+                bool healthy = true;
+                double diskTouchMs = 0;
+
                 {
                     time_t touchStarted = time(0);
-                    
+
                     readlock lk ( "local" );
                     Client::Context ctx( "local" );
                     shared_ptr<Cursor> c = theDataFileMgr.findAll( "local.oplog.rs" );
@@ -459,8 +463,20 @@ namespace mongo {
                       c->advance();
                       i++;
                     }
-                    health.append("diskTouchMs", (double) (time(0) - touchStarted));
+                    diskTouchMs = time(0) - touchStarted;
                 }
+
+                bool killFileExists = killFileWatcher.fileExists();
+                if (killFileExists) {
+                  healthy = false;
+                  msg = "kill file is present, forcing unhealthy status";
+                }
+
+                health.append("ok", healthy);
+                health.append("msg", msg);
+                health.append("killFile", killFileExists);
+                health.append("diskTouchMs", diskTouchMs);
+
                 result.append("healthStatus", health.obj());
             }
             timeBuilder.appendNumber( "after health" , Listener::getElapsedTimeMillis() - start );

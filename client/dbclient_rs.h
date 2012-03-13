@@ -95,8 +95,12 @@ namespace mongo {
         string getServerAddress() const;
 
         bool contains( const string& server ) const;
-        
+
         void appendInfo( BSONObjBuilder& b ) const;
+
+        // health check
+        static int getSleepSecs();
+        static void setSleepSecs( int sleepSecs );
 
     private:
         /**
@@ -148,16 +152,16 @@ namespace mongo {
 
         string _name;
         struct Node {
-            Node( const HostAndPort& a , DBClientConnection* c ) 
-                : addr( a ) , conn(c) , ok(true) , 
+            Node( const HostAndPort& a , DBClientConnection* c )
+                : addr( a ) , conn(c) , ok(true) ,
                   ismaster(false), secondary( false ) , hidden( false ) , pingTimeMillis(0), queueSize(0) {
                 ok = conn.get() == NULL;
             }
-            
+
             bool okPingAndQueue() const {
               return (pingTimeMillis < 100) && (queueSize < 20);
             }
-            
+
             bool okForSecondaryQueries() const {
                 return ok && secondary && ! hidden;
             }
@@ -169,7 +173,12 @@ namespace mongo {
                              "hidden" << hidden <<
                              "pingTimeInMillis" << pingTimeMillis <<
                              "queueSize" << queueSize <<
-                             "ok" << ok );
+                             "ok" << ok <<
+                             "healthOk" << healthOk <<
+                             "healthMsg" << healthMsg <<
+                             "healthDiskTouchMs" << healthDiskTouchMs <<
+                             "healthKillFile" << healthKillFile
+                             );
             }
 
             string toString() const {
@@ -188,11 +197,17 @@ namespace mongo {
             BSONObj lastIsMaster;
 
             bool ismaster;
-            bool secondary; 
+            bool secondary;
             bool hidden;
-            
+
             int pingTimeMillis;
             int queueSize;
+
+            // health status
+            bool healthOk;
+            string healthMsg;
+            int healthDiskTouchMs;
+            bool healthKillFile;
 
         };
 
@@ -208,6 +223,8 @@ namespace mongo {
         static map<string,ReplicaSetMonitorPtr> _sets; // set name to Monitor
 
         static ConfigChangeHook _hook;
+        // health check
+        static int _sleepSecs;
     };
 
     /** Use this class to connect to a replica set of servers.  The class will manage
@@ -317,7 +334,7 @@ namespace mongo {
 
         HostAndPort _slaveHost;
         scoped_ptr<DBClientConnection> _slave;
-        
+
         double _so_timeout;
 
         /**

@@ -20,6 +20,7 @@
 #include "../util/net/message.h"
 #include "../util/unittest.h"
 #include "../client/connpool.h"
+#include "../client/dbclient_rs.h"
 #include "../util/net/message_server.h"
 #include "../util/stringutils.h"
 #include "../util/version.h"
@@ -87,7 +88,7 @@ namespace mongo {
             assert( p );
             Request r( m , p );
 
-            assert( le );            
+            assert( le );
             lastError.startRequest( m , le );
 
             try {
@@ -197,6 +198,7 @@ int _main(int argc, char* argv[]) {
     po::options_description options("General options");
     po::options_description sharding_options("Sharding options");
     po::options_description hidden("Hidden options");
+    po::options_description healthcheck_options("Healthcheck options");
     po::positional_options_description positional;
 
     CmdLine::addGlobalOptions( options , hidden );
@@ -212,6 +214,12 @@ int _main(int argc, char* argv[]) {
     ;
 
     options.add(sharding_options);
+
+    healthcheck_options.add_options()
+    ( "checkInterval" , po::value<int>() , "in milliseconds" )
+    ;
+    options.add(healthcheck_options);
+
     // parse options
     po::variables_map params;
     if ( ! CmdLine::store( argc , argv , options , hidden , positional , params ) )
@@ -287,7 +295,17 @@ int _main(int argc, char* argv[]) {
             return 9;
         }
     }
-    
+
+    // set health check options
+    int interval = 10;
+    if ( params.count ( "checkInterval" ) ) {
+        interval = params["checkInterval"].as<int>() / 1000;
+    }
+    if ( interval < 1 ) {
+        interval = 1;
+    }
+    ReplicaSetMonitor::setSleepSecs(interval);
+
     // set some global state
 
     pool.addHook( new ShardingConnectionHook( false ) );
@@ -296,11 +314,11 @@ int _main(int argc, char* argv[]) {
     shardConnectionPool.addHook( new ShardingConnectionHook( true ) );
     shardConnectionPool.setName( "mongos shardconnection connectionpool" );
 
-    
+
     DBClientConnection::setLazyKillCursor( false );
 
     ReplicaSetMonitor::setConfigChangeHook( boost::bind( &ConfigServer::replicaSetChange , &configServer , _1 ) );
-    
+
     if ( argc <= 1 ) {
         usage( argv );
         return 3;
@@ -370,15 +388,15 @@ int main(int argc, char* argv[]) {
         doPreServerStatupInits();
         return _main(argc, argv);
     }
-    catch(DBException& e) { 
+    catch(DBException& e) {
         cout << "uncaught exception in mongos main:" << endl;
         cout << e.toString() << endl;
     }
-    catch(std::exception& e) { 
+    catch(std::exception& e) {
         cout << "uncaught exception in mongos main:" << endl;
         cout << e.what() << endl;
     }
-    catch(...) { 
+    catch(...) {
         cout << "uncaught exception in mongos main" << endl;
     }
     return 20;

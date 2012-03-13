@@ -15,7 +15,7 @@
 *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-/* SHARDING: 
+/* SHARDING:
    I believe this file is for mongod only.
    See s/commnands_public.cpp for mongos.
 */
@@ -51,11 +51,11 @@
 
 namespace mongo {
 
-    namespace dur { 
+    namespace dur {
         void setAgeOutJournalFiles(bool rotate);
     }
     /** @return true if fields found */
-    bool setParmsMongodSpecific(const string& dbname, BSONObj& cmdObj, string& errmsg, BSONObjBuilder& result, bool fromRepl ) { 
+    bool setParmsMongodSpecific(const string& dbname, BSONObj& cmdObj, string& errmsg, BSONObjBuilder& result, bool fromRepl ) {
         BSONElement e = cmdObj["ageOutJournalFiles"];
         if( !e.eoo() ) {
             bool r = e.trueValue();
@@ -146,12 +146,12 @@ namespace mongo {
                 }
             }
 
-            if ( cmdObj["j"].trueValue() ) { 
+            if ( cmdObj["j"].trueValue() ) {
                 if( !getDur().awaitCommit() ) {
                     // --journal is off
                     result.append("jnote", "journaling not enabled on this server");
                 }
-                if( cmdObj["fsync"].trueValue() ) { 
+                if( cmdObj["fsync"].trueValue() ) {
                     errmsg = "fsync and j options are not used together";
                     return false;
                 }
@@ -184,7 +184,7 @@ namespace mongo {
                 char buf[32];
                 while ( 1 ) {
                     OpTime op(c.getLastOp());
-                    
+
                     if ( op.isNull() ) {
                         if ( anyReplEnabled() ) {
                             result.append( "wnote" , "no write has been done on this connection" );
@@ -197,7 +197,7 @@ namespace mongo {
                             // w=2 and no repl
                             result.append( "wnote" , "no replication has been enabled, so w=2+ won't work" );
                             result.append( "err", "norepl" );
-                            return true; 
+                            return true;
                         }
                         break;
                     }
@@ -444,6 +444,14 @@ namespace mongo {
             result.appendDate( "localTime" , jsTime() );
 
             {
+                BSONObjBuilder health;
+
+                health.append("ok", true);
+
+                result.append("healthStatus", health.obj());
+            }
+
+            {
                 BSONObjBuilder t;
 
                 unsigned long long last, start, timeLocked;
@@ -504,20 +512,20 @@ namespace mongo {
 
                 int m = (int) (MemoryMappedFile::totalMappedLength() / ( 1024 * 1024 ));
                 t.appendNumber( "mapped" , m );
-                
+
                 if ( cmdLine.dur ) {
                     m *= 2;
                     t.appendNumber( "mappedWithJournal" , m );
                 }
-                
+
                 int overhead = v - m - connTicketHolder.used();
 
-                if( overhead > 7000 ) { 
+                if( overhead > 7000 ) {
                     t.append("note", "virtual minus mapped is large. could indicate a memory leak");
 
                     static time_t last = 0;
                     time_t now = time(0);
-                    
+
                     if ( last + 60 < now ) {
                         last = now;
                         log(3) << "warning: virtual size (" << v << "MB) - mapped size (" << m << "MB) is large (" << overhead << "MB). could indicate a memory leak" << endl;
@@ -613,11 +621,11 @@ namespace mongo {
             {
                 RamLog* rl = RamLog::get( "warnings" );
                 verify(15880, rl);
-                
+
                 if (rl->lastWrite() >= time(0)-(10*60)){ // only show warnings from last 10 minutes
                     vector<const char*> lines;
                     rl->get( lines );
-                    
+
                     BSONArrayBuilder arr( result.subarrayStart( "warnings" ) );
                     for ( unsigned i=std::max(0,(int)lines.size()-10); i<lines.size(); i++ )
                         arr.append( lines[i] );
@@ -627,7 +635,7 @@ namespace mongo {
 
             if ( ! authed )
                 result.append( "note" , "run against admin for more info" );
-            
+
             timeBuilder.appendNumber( "at end" , Listener::getElapsedTimeMillis() - start );
             if ( Listener::getElapsedTimeMillis() - start > 1000 ) {
                 BSONObj t = timeBuilder.obj();
@@ -1013,13 +1021,13 @@ namespace mongo {
                 boost::intmax_t size = dbSize( i->c_str() );
                 b.append( "sizeOnDisk", (double) size );
                 totalSize += size;
-                
+
                 {
                     readlock lk( *i );
                     Client::Context ctx( *i );
                     b.appendBool( "empty", ctx.db()->isEmpty() );
                 }
-                
+
                 dbInfos.push_back( b.obj() );
 
                 seen.insert( i->c_str() );
@@ -1031,7 +1039,7 @@ namespace mongo {
                 readlock lk;
                 dbHolder.getAllShortNames( allShortNames );
             }
-            
+
             for ( set<string>::iterator i = allShortNames.begin(); i != allShortNames.end(); i++ ) {
                 string name = *i;
 
@@ -1073,10 +1081,10 @@ namespace mongo {
             try {
                 ok = dbHolder.closeAll( dbpath , result, false );
             }
-            catch(DBException&) { 
+            catch(DBException&) {
                 throw;
             }
-            catch(...) { 
+            catch(...) {
                 log() << "ERROR uncaught exception in command closeAllDatabases" << endl;
                 errmsg = "unexpected uncaught exception";
                 return false;
@@ -1381,8 +1389,8 @@ namespace mongo {
         virtual bool slaveOk() const { return true; }
         virtual LockType locktype() const { return READ; }
         virtual void help( stringstream &help ) const {
-            help << 
-                "Get stats on a database. Not instantaneous. Slower for databases with large .ns files.\n" << 
+            help <<
+                "Get stats on a database. Not instantaneous. Slower for databases with large .ns files.\n" <<
                 "Example: { dbStats:1, scale:1 }";
         }
         bool run(const string& dbname, BSONObj& jsobj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl ) {
@@ -1433,7 +1441,7 @@ namespace mongo {
                 indexes += nsd->nIndexes;
                 indexSize += getIndexSizeForCollection(dbname, ns);
             }
-            
+
             result.append      ( "db" , dbname );
             result.appendNumber( "collections" , ncollections );
             result.appendNumber( "objects" , objects );

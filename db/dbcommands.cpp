@@ -489,6 +489,23 @@ namespace mongo {
             }
             timeBuilder.appendNumber( "after basic" , Listener::getElapsedTimeMillis() - start );
 
+
+            {
+                time_t touchStarted = time(0);
+                log() << " doing touch on " << "local" << endl;
+                readlock lk ( "local" );
+                Client::Context ctx( "local" );
+                shared_ptr<Cursor> c = theDataFileMgr.findAll( "local.oplog.rs" );
+                int i = 0;
+                while ( c->ok() && i < 100) {
+                  c->currLoc().rec()->touch();
+                  c->advance();
+                  i++;
+                }
+                time_t touchElapsed = time(0) - touchStarted;
+                log() << " touch took " << touchElapsed << " ms" << endl;
+            }
+
             {
 
                 BSONObjBuilder t( result.subobjStart( "mem" ) );

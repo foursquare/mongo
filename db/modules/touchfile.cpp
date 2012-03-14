@@ -63,6 +63,7 @@ namespace mongo {
                     // file is new, write out the whole thing
                     fileofs loc = 0;
                     char mybuffer[ BLKSZ ];
+                    memset(mybuffer, 0, sizeof(mybuffer));
                     while ( loc / BLKSZ < CHUNKS ) {
                        f.write( loc , mybuffer , BLKSZ );
                        loc += BLKSZ;
@@ -72,6 +73,7 @@ namespace mongo {
                     unsigned i = 0;
                     const unsigned SMALL_BLKSZ = 4;
                     char mybuffer[ SMALL_BLKSZ ];
+                    memset(mybuffer, 1, sizeof(mybuffer));
                     while ( i < CHUNKS ) {
                        f.write( i * BLKSZ , mybuffer , SMALL_BLKSZ );
                        i++;

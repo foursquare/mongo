@@ -44,12 +44,12 @@ namespace mongo {
    void KillFileWatcher::config( program_options::variables_map& params ) {
       if (params.count("kill-file-path") > 0) {
         _path = params["kill-file-path"].as<string>();
-      }
 
-      // in newer versions of boost, is_complete is renamed to is_absolute, but we don't have that yet.
-      if (!boost::filesystem::path(_path).is_complete()) {
-        log(LL_ERROR) << "kill-file-path must be absolute! bailing since we got " << _path << endl;
-        throw std::runtime_error("kill-file-path must be absolute!");
+        // in newer versions of boost, is_complete is renamed to is_absolute, but we don't have that yet.
+        if (!boost::filesystem::path(_path).is_complete()) {
+          log(LL_ERROR) << "kill-file-path must be absolute! bailing since we got " << _path << endl;
+          throw std::runtime_error("kill-file-path must be absolute!");
+        }
       }
    }
 

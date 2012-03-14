@@ -504,6 +504,14 @@ namespace mongo {
                 }
 
                 _nodes[nodesOffset].lastIsMaster = repl.copy();
+                // health status
+                if ( (o.hasField("healthStatus") && o["healthStatus"].type() == Object) ) {
+                    BSONObj healthStatus = o["healthStatus"].embeddedObject();
+                    _nodes[nodesOffset].healthOk = healthStatus["ok"].trueValue();
+                    _nodes[nodesOffset].healthMsg = healthStatus["msg"].String();
+                    _nodes[nodesOffset].healthDiskTouchMs = healthStatus["diskTouchMs"].numberInt();
+                    _nodes[nodesOffset].healthKillFile = healthStatus["killFile"].trueValue();
+                }
             }
 
             log( ! verbose ) << "ReplicaSetMonitor::_checkConnection: " << c->toString() << ' ' << repl << endl;
@@ -522,15 +530,6 @@ namespace mongo {
                 while( it.more() ) b.append( it.next() );
             }
 
-            // health status
-            if ( (o.hasField("healthStatus") && o["healthStatus"].type() == Object) ) {
-                BSONObj healthStatus = o["healthStatus"].embeddedObject();
-                _nodes[nodesOffset].healthOk = healthStatus["ok"].trueValue();
-                // TODO(leo) uncomment these when we know they're available
-//                _nodes[nodesOffset].healthMsg = healthStatus["msg"].String();
-//                _nodes[nodesOffset].healthDiskTouchMs = healthStatus["diskTouchMs"].numberInt();
-//                _nodes[nodesOffset].healthKillFile = healthStatus["killFile"].trueValue();
-            }
 
             _checkHosts( b.arr(), changed);
             _checkStatus(c);

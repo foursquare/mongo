@@ -305,7 +305,7 @@ int _main(int argc, char* argv[]) {
     ReplicaSetMonitor::setSleepSecs(interval);
     out() << "sleepSecs: " << ReplicaSetMonitor::getSleepSecs() << endl;
 
-    int maxCheckFailures = 3;
+    unsigned int maxCheckFailures = 3;
     if ( params.count ( "maxCheckFailures" ) ) {
         maxCheckFailures = params["maxCheckFailures"].as<int>();
     }

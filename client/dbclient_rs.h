@@ -109,9 +109,9 @@ namespace mongo {
          * Number of times a health check can fail until the replica no longer
          * serves queries
          */
-        static int getMaxCheckFailures();
+        static unsigned int getMaxCheckFailures();
 
-        static void setMaxCheckFailures( int maxCheckFailures );
+        static void setMaxCheckFailures( unsigned int maxCheckFailures );
 
     private:
         /**
@@ -220,7 +220,7 @@ namespace mongo {
             string healthMsg;
             int healthDiskTouchMs;
             bool healthKillFile;
-            int healthCheckFailCount;
+            unsigned int healthCheckFailCount;
         };
 
         /**
@@ -238,7 +238,7 @@ namespace mongo {
 
         // health check
         static int _sleepSecs;
-        static int _maxCheckFailures;
+        unsigned static int _maxCheckFailures;
     };
 
     /** Use this class to connect to a replica set of servers.  The class will manage

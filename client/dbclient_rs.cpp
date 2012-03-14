@@ -187,11 +187,11 @@ namespace mongo {
         return _sleepSecs;
     }
 
-    void ReplicaSetMonitor::setMaxCheckFailures( int maxCheckFailures ) {
+    void ReplicaSetMonitor::setMaxCheckFailures( unsigned int maxCheckFailures ) {
         _maxCheckFailures = maxCheckFailures;
     }
 
-    int ReplicaSetMonitor::getMaxCheckFailures() {
+    unsigned int ReplicaSetMonitor::getMaxCheckFailures() {
         return _maxCheckFailures;
     }
 
@@ -678,7 +678,7 @@ namespace mongo {
     ReplicaSetMonitor::ConfigChangeHook ReplicaSetMonitor::_hook;
     // health check
     int ReplicaSetMonitor::_sleepSecs;
-    int ReplicaSetMonitor::_maxCheckFailures;
+    unsigned int ReplicaSetMonitor::_maxCheckFailures;
     // --------------------------------
     // ----- DBClientReplicaSet ---------
     // --------------------------------

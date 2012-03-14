@@ -455,6 +455,13 @@ namespace mongo {
                 if (killFileExists) {
                   healthy = false;
                   msg = "kill file is present, forcing unhealthy status";
+                } else if ( touchFile.lastTouchElapsedMs() > 100 ) {
+                  // TODO(jon) how to handle flapping?
+                  healthy = false;
+                  msg = "touchFile took more than 100ms";
+                } else if ( time(0) - touchFile.lastTouchTimestamp() > 3000 ) {
+                  healthy = false;
+                  msg = "last touchFile poll was more than 3 seconds ago";
                 }
 
                 health.append("ok", healthy);

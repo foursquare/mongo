@@ -453,7 +453,7 @@ namespace mongo {
                 double diskTouchMs = 0;
 
                 {
-                    time_t touchStarted = time(0);
+                    time_t touchStarted = Listener::getElapsedTimeMillis();
                     File f;
                     // 4 chunks of 256kb.  should hit every stripe in a 4 drive raid0
                     const unsigned BLKSZ = 256 * 1024;
@@ -481,7 +481,7 @@ namespace mongo {
                     }
   
                     f.fsync();
-                    diskTouchMs = time(0) - touchStarted;
+                    diskTouchMs = Listener::getElapsedTimeMillis() - touchStarted;
                 }
 
                 bool killFileExists = killFileWatcher.fileExists();

@@ -660,8 +660,11 @@ namespace mongo {
                                 "hidden" << _nodes[i].hidden <<
                                 "secondary" << _nodes[i].secondary <<
                                 "pingTimeMillis" << _nodes[i].pingTimeMillis <<
-                                "queueSize" << _nodes[i].queueSize  ) );
-                                // TODO(leo) add healthStatus block here
+                                "queueSize" << _nodes[i].queueSize <<
+                                "healthMsg" << _nodes[i].healthMsg <<
+                                "healthDiskTouchMs" << _nodes[i].healthDiskTouchMs <<
+                                "healthKillFile" << _nodes[i].healthKillFile <<
+                                "healthCheckFailCount" << _nodes[i].healthCheckFailCount));
         }
         hosts.done();
 

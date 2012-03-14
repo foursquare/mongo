@@ -29,7 +29,7 @@ namespace mongo {
         Listener(const string& name, const string &ip, int port, bool logConnect=true );
 
         virtual ~Listener();
-        
+
 #ifdef MONGO_SSL
         /**
          * make this an ssl socket
@@ -74,21 +74,21 @@ namespace mongo {
         string _ip;
         bool _logConnect;
         long long _elapsedTime;
-        
+
 #ifdef MONGO_SSL
         SSLManager* _ssl;
         int _sslPort;
 #endif
-        
+
         /**
          * @return true iff everything went ok
          */
         bool _setupSockets( const vector<SockAddr>& mine , vector<int>& socks );
-        
+
         void _logListen( int port , bool ssl );
 
         static const Listener* _timeTracker;
-        
+
         virtual bool useUnixSockets() const { return false; }
     };
 

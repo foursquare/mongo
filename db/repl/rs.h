@@ -56,7 +56,7 @@ namespace mongo {
     class Member : public List1<Member>::Base {
     private:
         ~Member(); // intentionally unimplemented as should never be called -- see List1<>::Base.
-        Member(const Member&); 
+        Member(const Member&);
     public:
         Member(HostAndPort h, unsigned ord, ReplSetConfig::MemberCfg *c, bool self);
 
@@ -342,7 +342,7 @@ namespace mongo {
         void assumePrimary();
         void loadLastOpTimeWritten(bool quiet=false);
         void changeState(MemberState s);
-        
+
         /**
          * Find the closest member (using ping time) with a higher latest optime.
          */
@@ -387,7 +387,7 @@ namespace mongo {
          * of the current primary), the node (or nodes) with connections to both
          * the primary and the secondary with higher priority will issue
          * replSetStepDown requests to the primary to allow the higher-priority
-         * node to take over.  
+         * node to take over.
          */
         void addToElectable(const unsigned m) { lock lk(this); _electableSet.insert(m); }
         void rmFromElectable(const unsigned m) { lock lk(this); _electableSet.erase(m); }
@@ -408,7 +408,7 @@ namespace mongo {
          *  - intentionally leaks the old _cfg and any old _members (if the
          *    change isn't strictly additive)
          */
-        bool initFromConfig(ReplSetConfig& c, bool reconf=false); 
+        bool initFromConfig(ReplSetConfig& c, bool reconf=false);
         void _fillIsMaster(BSONObjBuilder&);
         void _fillIsMasterHost(const Member*, vector<string>&, vector<string>&, vector<string>&);
         const ReplSetConfig& config() { return *_cfg; }
@@ -445,11 +445,7 @@ namespace mongo {
         list<HostAndPort> memberHostnames() const;
         const ReplSetConfig::MemberCfg& myConfig() const { return _config; }
         bool iAmArbiterOnly() const { return myConfig().arbiterOnly; }
-        bool iAmPotentiallyHot() const {
-          return myConfig().potentiallyHot() && // not an arbiter
-            elect.steppedDown <= time(0) && // not stepped down/frozen
-            state() == MemberState::RS_SECONDARY; // not stale
-        }
+        bool iAmPotentiallyHot() const;
     protected:
         Member *_self;
         bool _buildIndexes;       // = _self->config().buildIndexes
@@ -510,8 +506,9 @@ namespace mongo {
     public:
         ReplSet(ReplSetCmdline& replSetCmdline) : ReplSetImpl(replSetCmdline) {  }
 
-        // for the replSetStepDown command
+        // for the replSetStepDown command and KillFileWatcher.
         bool stepDown(int secs) { return _stepDown(secs); }
+        bool isSafeToStepDown(string& errmsg, BSONObjBuilder& detailedResponse);
 
         // for the replSetFreeze command
         bool freeze(int secs) { return _freeze(secs); }

@@ -17,29 +17,44 @@
 
 
 #include "pch.h"
+#include "killfilewatcher.h"
 #include "../db.h"
 #include "../instance.h"
 #include "../module.h"
+#include "../repl/rs.h"
+#include "../commands.h"
 #include "../../util/background.h"
 #include "../../util/log.h"
-#include "../commands.h"
-#include "killfilewatcher.h"
+#include "../../util/net/listen.h"
 
 namespace po = boost::program_options;
 
 namespace mongo {
 
     KillFileWatcher::KillFileWatcher()
-      : Module( "killfilewatcher" ) , _path( "" ), _fileExists(false) {
+      : Module( "killfilewatcher" ), _path( "" ), _killFileShouldTriggerStepDown(false),
+        _isKilled(false), _numChecksSinceChange(0), _timeOfLastChange(0),
+        _hasSteppedDown(false) {
 
       add_options()
-         ( "kill-file-path" , po::value<string>() , "absolute path of kill-file to watch for health checking. if unset, no kill-file is monitored" )
+         ( "kill-file-path" ,
+           po::value<string>() ,
+           "absolute path of kill-file to watch for health checking. if unset, no kill-file is monitored" )
+         ( "kill-file-should-trigger-step-down" ,
+           "if specified, then the presence of a kill-file will tell the mongod to step down, if it's the master.")
          ;
     }
 
    KillFileWatcher::~KillFileWatcher() {}
 
-   bool KillFileWatcher::fileExists() const { return _fileExists; }
+   bool KillFileWatcher::isKilled() const { return _isKilled; }
+   bool KillFileWatcher::isForcedToNotBePrimary() const {
+       if (_isKilled && _killFileShouldTriggerStepDown) {
+           return true;
+       } else {
+           return false;
+       }
+   }
 
    bool KillFileWatcher::config( program_options::variables_map& params ) {
       if (params.count("kill-file-path") > 0) {
@@ -52,10 +67,34 @@ namespace mongo {
         }
       }
 
+      if (params.count("kill-file-should-trigger-step-down") > 0) {
+        _killFileShouldTriggerStepDown = true;
+      }
+
       return true;
    }
 
     string KillFileWatcher::name() const { return "killfilewatcher"; }
+
+    void KillFileWatcher::tryStepDownIfApplicable() {
+        if (_isKilled && replSet && theReplSet && theReplSet->isPrimary() &&
+            _killFileShouldTriggerStepDown && !_hasSteppedDown) {
+            // step down
+            string errmsg;
+            BSONObjBuilder unusedBuilder;
+            if (!theReplSet->isSafeToStepDown(errmsg, unusedBuilder)) {
+                log() << "kill file is present but we can't step down because it's unsafe: "
+                      << errmsg << ". will try again in a minute."
+                      << endl;
+            } else {
+                log() << "stepping down as master for 60s due to presence of kill file!" << endl;
+                _hasSteppedDown = theReplSet->stepDown(60);
+                if (!_hasSteppedDown) {
+                  log() << "failed to step down as master. will try again in a minute." << endl;
+                }
+            }
+        }
+    }
 
     void KillFileWatcher::run() {
         if ( _path.size() == 0 ) {
@@ -65,17 +104,36 @@ namespace mongo {
 
         log() << "kill-file monitor starting and monitoring path " << _path << endl;
 
+        Client::initThread( "killfilewatcher" );
+
         while ( ! inShutdown() ) {
             sleepsecs( 1 );
 
             try {
-                bool previousValue = _fileExists;
-                _fileExists = boost::filesystem::exists(_path);
-                if (_fileExists != previousValue) {
-                  log() << "kill file status changed! "
-                        << "before: " << (previousValue ? "KILLED. " : "OK. ")
-                        << "now: " << (_fileExists ? "KILLED. " : "OK. ")
-                        << endl;
+                bool previousValue = _isKilled;
+                _isKilled = boost::filesystem::exists(_path);
+                if (_isKilled != previousValue) {
+                    _hasSteppedDown = false;
+                    _numChecksSinceChange = 0;
+                    _timeOfLastChange = Listener::getElapsedTimeMillis();
+
+                    log() << "kill file status changed! "
+                          << "before: " << (previousValue ? "KILLED. " : "OK. ")
+                          << "now: " << (_isKilled ? "KILLED. " : "OK. ")
+                          << endl;
+
+                    if (_isKilled) {
+                      tryStepDownIfApplicable();
+                    }
+                } else if (_isKilled) {
+                    tryStepDownIfApplicable();
+
+                    ++_numChecksSinceChange;
+                    if ((_numChecksSinceChange % 60) == 0) {
+                        log() << "still in KILLED state. kill file has existed for "
+                              << ((Listener::getElapsedTimeMillis() - _timeOfLastChange) / 1000)
+                              << " seconds" << endl;
+                    }
                 }
             }
             catch ( std::exception& e ) {

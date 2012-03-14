@@ -15,6 +15,7 @@
  *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#pragma once
 
 #include "pch.h"
 #include "../db.h"
@@ -22,6 +23,8 @@
 #include "../module.h"
 #include "../../util/background.h"
 #include "../commands.h"
+
+#include <ctime>
 
 namespace mongo {
 
@@ -31,25 +34,42 @@ namespace mongo {
     class KillFileWatcher : public BackgroundJob , Module {
     public:
 
-       KillFileWatcher();
-       ~KillFileWatcher();
+        KillFileWatcher();
+        ~KillFileWatcher();
 
-       bool fileExists() const;
+        bool isKilled() const;
+        bool isForcedToNotBePrimary() const;
 
-       bool config( program_options::variables_map& params );
+        bool config( program_options::variables_map& params );
 
-       string name() const;
+        string name() const;
 
-       void run();
+        void run();
 
-       void init();
-
-       void shutdown();
+        void init();
+        void shutdown();
 
     private:
-       string _path;
-       bool _fileExists;
+        void tryStepDownIfApplicable();
 
+        // These two fields are command-line configured parameters.
+        string _path;
+        bool _killFileShouldTriggerStepDown;
+
+        // These fields represent the current state of the watcher.
+        // Whether the kill file currently exists.
+        bool _isKilled;
+        // How many times we've checked and the kill file has still existed (so
+        // we can log reminders, and try to take action periodically if our
+        // first attempt failed).
+        int _numChecksSinceChange;
+        // When the last transition occurred.
+        long long _timeOfLastChange;
+        // If this node was a master and the kill file is present and the
+        // command-line param told us too, we may have stepped down. Indicates
+        // whether we successfully stepped down so, if we didn't, we can try
+        // again.
+        bool _hasSteppedDown;
     };
 
     extern KillFileWatcher killFileWatcher;

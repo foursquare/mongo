@@ -451,7 +451,7 @@ namespace mongo {
                 string msg = "healthy";
                 bool healthy = true;
 
-                bool killFileExists = killFileWatcher.fileExists();
+                bool killFileExists = killFileWatcher.isKilled();
                 if (killFileExists) {
                   healthy = false;
                   msg = "kill file is present, forcing unhealthy status";

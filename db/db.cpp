@@ -53,7 +53,7 @@
 
 namespace mongo {
 
-    namespace dur { 
+    namespace dur {
         extern unsigned long long DataLimitPerJournalFile;
     }
 
@@ -282,8 +282,8 @@ namespace mongo {
             if ( !h->isCurrentVersion() || forceRepair ) {
 
                 if( h->version <= 0 ) {
-                    uasserted(14026, 
-                      str::stream() << "db " << dbName << " appears corrupt pdfile version: " << h->version 
+                    uasserted(14026,
+                      str::stream() << "db " << dbName << " appears corrupt pdfile version: " << h->version
 							        << " info: " << h->versionMinor << ' ' << h->fileLength);
                 }
 
@@ -489,8 +489,8 @@ namespace mongo {
     void testPretouch();
 
     void initAndListen(int listenPort) {
-        try { 
-            _initAndListen(listenPort); 
+        try {
+            _initAndListen(listenPort);
         }
         catch ( DBException &e ) {
             log() << "exception in initAndListen: " << e.toString() << ", terminating" << endl;
@@ -701,7 +701,7 @@ int main(int argc, char* argv[]) {
                 // we need to change dbpath if we fork since we change
                 // cwd to "/"
                 // fork only exists on *nix
-                // so '/' is safe 
+                // so '/' is safe
                 dbpath = cmdLine.cwd + "/" + dbpath;
             }
         }
@@ -746,8 +746,8 @@ int main(int argc, char* argv[]) {
         if (params.count("durOptions")) {
             cmdLine.durOptions = params["durOptions"].as<int>();
         }
-        if( params.count("journalCommitInterval") ) { 
-            // don't check if dur is false here as many will just use the default, and will default to off on win32. 
+        if( params.count("journalCommitInterval") ) {
+            // don't check if dur is false here as many will just use the default, and will default to off on win32.
             // ie no point making life a little more complex by giving an error on a dev environment.
             cmdLine.journalCommitInterval = params["journalCommitInterval"].as<unsigned>();
             if( cmdLine.journalCommitInterval <= 1 || cmdLine.journalCommitInterval > 300 ) {
@@ -942,7 +942,10 @@ int main(int argc, char* argv[]) {
         if( repairpath.empty() )
             repairpath = dbpath;
 
-        Module::configAll( params );
+        if (!Module::configAll( params )) {
+          log() << "bad module configuration! see earlier logs for more detailed errors" << endl;
+          dbexit(EXIT_BADOPTIONS);
+        }
         dataFileSync.go();
 
         if (params.count("command")) {
@@ -1095,7 +1098,7 @@ namespace mongo {
         printStackTrace( oss );
         rawOut( oss.str() );
 
-        if( cmdLine.dur ) { 
+        if( cmdLine.dur ) {
             ::exit(EXIT_ABRUPT);
         }
 
@@ -1108,13 +1111,13 @@ namespace mongo {
         if ( signal == SIGSEGV || signal == SIGBUS ) {
             oss << " access";
         } else {
-            oss << " operation";   
+            oss << " operation";
         }
         oss << " at address: " << siginfo->si_addr << endl;
         rawOut( oss.str() );
-        abruptQuit( signal );   
+        abruptQuit( signal );
     }
-        
+
     sigset_t asyncSignals;
     // The above signals will be processed by this thread only, in order to
     // ensure the db and log mutexes aren't held.
@@ -1142,12 +1145,12 @@ namespace mongo {
         addrSignals.sa_sigaction = abruptQuitWithAddrSignal;
         sigemptyset( &addrSignals.sa_mask );
         addrSignals.sa_flags = SA_SIGINFO;
-       
+
         assert( sigaction(SIGSEGV, &addrSignals, 0) == 0 );
         assert( sigaction(SIGBUS, &addrSignals, 0) == 0 );
         assert( sigaction(SIGILL, &addrSignals, 0) == 0 );
         assert( sigaction(SIGFPE, &addrSignals, 0) == 0 );
-        
+
         assert( signal(SIGABRT, abruptQuit) != SIG_ERR );
         assert( signal(SIGQUIT, abruptQuit) != SIG_ERR );
         assert( signal(SIGPIPE, pipeSigHandler) != SIG_ERR );
@@ -1202,7 +1205,7 @@ namespace mongo {
 
     LPTOP_LEVEL_EXCEPTION_FILTER filtLast = 0;
     ::HANDLE standardOut = GetStdHandle(STD_OUTPUT_HANDLE);
-    LONG WINAPI exceptionFilter(struct _EXCEPTION_POINTERS *ExceptionInfo) { 
+    LONG WINAPI exceptionFilter(struct _EXCEPTION_POINTERS *ExceptionInfo) {
         {
             // given the severity of the event we write to console in addition to the --logFile
             // (rawOut writes to the logfile, if a special one were specified)
@@ -1214,7 +1217,7 @@ namespace mongo {
         DWORD ec = ExceptionInfo->ExceptionRecord->ExceptionCode;
         if( ec == EXCEPTION_ACCESS_VIOLATION ) {
             rawOut("access violation");
-        } 
+        }
         else {
             rawOut("unhandled windows exception");
             char buf[64];
@@ -1222,23 +1225,23 @@ namespace mongo {
             _ui64toa(ec, buf+5, 16);
             rawOut(buf);
         }
-        if( filtLast ) 
+        if( filtLast )
             return filtLast(ExceptionInfo);
         return EXCEPTION_EXECUTE_HANDLER;
     }
 
     // called by mongoAbort()
     extern void (*reportEventToSystem)(const char *msg);
-    void reportEventToSystemImpl(const char *msg) { 
+    void reportEventToSystemImpl(const char *msg) {
         static ::HANDLE hEventLog = RegisterEventSource( NULL, TEXT("mongod") );
-        if( hEventLog ) { 
+        if( hEventLog ) {
             std::wstring s = toNativeString(msg);
             LPCTSTR txt = s.c_str();
             BOOL ok = ReportEvent(
-              hEventLog, EVENTLOG_ERROR_TYPE, 
+              hEventLog, EVENTLOG_ERROR_TYPE,
               0, 0, NULL,
-              1, 
-              0, 
+              1,
+              0,
               &txt,
               0);
             wassert(ok);

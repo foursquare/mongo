@@ -40,9 +40,11 @@ namespace mongo {
         }
 
         /**
-         * read config from command line
+         * read config from command line. returns false if the params are
+         * invalid and startup should be aborted. The module must print out a
+         * helpful log message if it chooses to return false.
          */
-        virtual void config( program_options::variables_map& params ) = 0;
+        virtual bool config( program_options::variables_map& params ) = 0;
 
         /**
          * called after configuration when the server is ready start
@@ -59,7 +61,8 @@ namespace mongo {
         // --- static things
 
         static void addOptions( program_options::options_description& options );
-        static void configAll( program_options::variables_map& params );
+        // Returns false if the params are invalid and startup should be aborted.
+        static bool configAll( program_options::variables_map& params );
         static void initAll();
 
     private:

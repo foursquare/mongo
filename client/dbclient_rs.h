@@ -111,7 +111,7 @@ namespace mongo {
          */
         static int getMaxCheckFailures();
 
-        static void setMaxCheckFailures( int maxHealthCheckFailures );
+        static void setMaxCheckFailures( int maxCheckFailures );
 
     private:
         /**
@@ -165,7 +165,8 @@ namespace mongo {
         struct Node {
             Node( const HostAndPort& a , DBClientConnection* c )
                 : addr( a ) , conn(c) , ok(true) ,
-                  ismaster(false), secondary( false ) , hidden( false ) , pingTimeMillis(0), queueSize(0) {
+                  ismaster(false), secondary( false ) , hidden( false ) , pingTimeMillis(0), queueSize(0) ,
+                  healthMsg ( "unknown" ), healthDiskTouchMs ( 0 ), healthKillFile ( false ), healthCheckFailCount ( 0 ) {
                 ok = conn.get() == NULL;
             }
 
@@ -174,7 +175,8 @@ namespace mongo {
             }
 
             bool okForSecondaryQueries() const {
-                return ok && secondary && ! hidden && healthOk;
+                return ok && secondary && ! hidden
+                  && (healthCheckFailCount < ReplicaSetMonitor::getMaxCheckFailures());
             }
 
             BSONObj toBSON() const {
@@ -185,10 +187,10 @@ namespace mongo {
                              "pingTimeInMillis" << pingTimeMillis <<
                              "queueSize" << queueSize <<
                              "ok" << ok <<
-                             "healthOk" << healthOk <<
                              "healthMsg" << healthMsg <<
                              "healthDiskTouchMs" << healthDiskTouchMs <<
-                             "healthKillFile" << healthKillFile
+                             "healthKillFile" << healthKillFile <<
+                             "healthCheckFailCount" << healthCheckFailCount
                              );
             }
 
@@ -215,12 +217,10 @@ namespace mongo {
             int queueSize;
 
             // health status
-            // TODO(leo): combine healthOk with ok and use enumerations for states
-            bool healthOk;
             string healthMsg;
             int healthDiskTouchMs;
             bool healthKillFile;
-
+            int healthCheckFailCount;
         };
 
         /**

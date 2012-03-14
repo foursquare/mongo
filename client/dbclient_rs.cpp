@@ -515,7 +515,11 @@ namespace mongo {
                 // health status
                 if ( (o.hasField("healthStatus") && o["healthStatus"].type() == Object) ) {
                     BSONObj healthStatus = o["healthStatus"].embeddedObject();
-                    _nodes[nodesOffset].healthOk = healthStatus["ok"].trueValue();
+                    if ( healthStatus["ok"].trueValue() ) {
+                        _nodes[nodesOffset].healthCheckFailCount = 0;
+                    } else {
+                        _nodes[nodesOffset].healthCheckFailCount += 1;
+                    }
                     _nodes[nodesOffset].healthMsg = healthStatus["msg"].String();
                     _nodes[nodesOffset].healthDiskTouchMs = healthStatus["diskTouchMs"].numberInt();
                     _nodes[nodesOffset].healthKillFile = healthStatus["killFile"].trueValue();

@@ -174,7 +174,7 @@ namespace mongo {
             }
 
             bool okForSecondaryQueries() const {
-                return ok && secondary && ! hidden;
+                return ok && secondary && ! hidden && healthOk;
             }
 
             BSONObj toBSON() const {
@@ -215,6 +215,7 @@ namespace mongo {
             int queueSize;
 
             // health status
+            // TODO(leo): combine healthOk with ok and use enumerations for states
             bool healthOk;
             string healthMsg;
             int healthDiskTouchMs;

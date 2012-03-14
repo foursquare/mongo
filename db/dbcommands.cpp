@@ -49,6 +49,7 @@
 #include "../s/d_writeback.h"
 #include "dur_stats.h"
 #include "modules/killfilewatcher.h"
+#include "../util/file.h"
 
 namespace mongo {
 
@@ -453,16 +454,33 @@ namespace mongo {
 
                 {
                     time_t touchStarted = time(0);
-
-                    readlock lk ( "local" );
-                    Client::Context ctx( "local" );
-                    shared_ptr<Cursor> c = theDataFileMgr.findAll( "local.oplog.rs" );
-                    int i = 0;
-                    while ( c->ok() && i < 100) {
-                      c->currLoc().rec()->touch();
-                      c->advance();
-                      i++;
+                    File f;
+                    // 4 chunks of 256kb.  should hit every stripe in a 4 drive raid0
+                    const unsigned BLKSZ = 256 * 1024;
+                    const unsigned CHUNKS = 4;
+                    f.open( ( dbpath + "/touchfile" ).c_str() , /*read-only*/ false , /*direct-io*/ false );
+                    assert( f.is_open() );
+  
+                    if ( f.len() < CHUNKS * BLKSZ ) {
+                        // file is new, write out the whole thing
+                        fileofs loc = 0;
+                        char mybuffer[ BLKSZ ];
+                        while ( loc / BLKSZ < CHUNKS ) {
+                           f.write( loc , mybuffer , BLKSZ );
+                           loc += BLKSZ;
+                        }
+                    } else {
+                        // file already exists, so do sparse writes
+                        unsigned i = 0;
+                        const unsigned SMALL_BLKSZ = 4;
+                        char mybuffer[ SMALL_BLKSZ ];
+                        while ( i < CHUNKS ) {
+                           f.write( i * BLKSZ , mybuffer , SMALL_BLKSZ );
+                           i++;
+                        }
                     }
+  
+                    f.fsync();
                     diskTouchMs = time(0) - touchStarted;
                 }
 

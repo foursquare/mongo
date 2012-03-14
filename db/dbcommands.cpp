@@ -459,7 +459,7 @@ namespace mongo {
                   // TODO(jon) how to handle flapping?
                   healthy = false;
                   msg = "touchFile took more than 100ms";
-                } else if ( time(0) - touchFile.lastTouchTimestamp() > 3000 ) {
+                } else if ( (time(0) - touchFile.lastTouchTimestamp()) > 3 ) {
                   healthy = false;
                   msg = "last touchFile poll was more than 3 seconds ago";
                 }

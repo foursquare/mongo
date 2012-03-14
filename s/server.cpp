@@ -216,7 +216,7 @@ int _main(int argc, char* argv[]) {
     options.add(sharding_options);
 
     healthcheck_options.add_options()
-    ( "checkInterval" , po::value<int>() , "in milliseconds" )
+    ( "checkInterval" , po::value<int>() , "in seconds" )
     ( "maxCheckFailures" , po::value<int>() , "maximum number of health check failures until replica stops taking queries" )
     ;
     options.add(healthcheck_options);
@@ -300,7 +300,7 @@ int _main(int argc, char* argv[]) {
     // set health check options
     int interval = 10;
     if ( params.count ( "checkInterval" ) ) {
-        interval = params["checkInterval"].as<unsigned int>() / 1000;
+        interval = params["checkInterval"].as<unsigned int>();
     }
     ReplicaSetMonitor::setSleepSecs(interval);
     out() << "sleepSecs: " << ReplicaSetMonitor::getSleepSecs() << endl;

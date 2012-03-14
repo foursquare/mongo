@@ -187,6 +187,14 @@ namespace mongo {
         return _sleepSecs;
     }
 
+    void ReplicaSetMonitor::setMaxCheckFailures( int maxCheckFailures ) {
+        _maxCheckFailures = maxCheckFailures;
+    }
+
+    int ReplicaSetMonitor::getMaxCheckFailures() {
+        return _maxCheckFailures;
+    }
+
     string ReplicaSetMonitor::getServerAddress() const {
         scoped_lock lk( _lock );
         return _getServerAddress_inlock();
@@ -649,7 +657,7 @@ namespace mongo {
                                 "secondary" << _nodes[i].secondary <<
                                 "pingTimeMillis" << _nodes[i].pingTimeMillis <<
                                 "queueSize" << _nodes[i].queueSize  ) );
-
+                                // TODO(leo) add healthStatus block here
         }
         hosts.done();
 
@@ -663,6 +671,7 @@ namespace mongo {
     ReplicaSetMonitor::ConfigChangeHook ReplicaSetMonitor::_hook;
     // health check
     int ReplicaSetMonitor::_sleepSecs;
+    int ReplicaSetMonitor::_maxCheckFailures;
     // --------------------------------
     // ----- DBClientReplicaSet ---------
     // --------------------------------

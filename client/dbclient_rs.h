@@ -98,9 +98,20 @@ namespace mongo {
 
         void appendInfo( BSONObjBuilder& b ) const;
 
-        // health check
+        /**
+         * Number of seconds to sleep for a replica status check
+         */
         static int getSleepSecs();
+
         static void setSleepSecs( int sleepSecs );
+
+        /**
+         * Number of times a health check can fail until the replica no longer
+         * serves queries
+         */
+        static int getMaxCheckFailures();
+
+        static void setMaxCheckFailures( int maxHealthCheckFailures );
 
     private:
         /**
@@ -223,8 +234,10 @@ namespace mongo {
         static map<string,ReplicaSetMonitorPtr> _sets; // set name to Monitor
 
         static ConfigChangeHook _hook;
+
         // health check
         static int _sleepSecs;
+        static int _maxCheckFailures;
     };
 
     /** Use this class to connect to a replica set of servers.  The class will manage

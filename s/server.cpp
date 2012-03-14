@@ -198,7 +198,7 @@ int _main(int argc, char* argv[]) {
     po::options_description options("General options");
     po::options_description sharding_options("Sharding options");
     po::options_description hidden("Hidden options");
-    po::options_description healthcheck_options("Healthcheck options");
+    po::options_description healthcheck_options("Health check options");
     po::positional_options_description positional;
 
     CmdLine::addGlobalOptions( options , hidden );
@@ -217,6 +217,7 @@ int _main(int argc, char* argv[]) {
 
     healthcheck_options.add_options()
     ( "checkInterval" , po::value<int>() , "in milliseconds" )
+    ( "maxCheckFailures" , po::value<int>() , "maximum number of health check failures until replica stops taking queries" )
     ;
     options.add(healthcheck_options);
 
@@ -299,12 +300,17 @@ int _main(int argc, char* argv[]) {
     // set health check options
     int interval = 10;
     if ( params.count ( "checkInterval" ) ) {
-        interval = params["checkInterval"].as<int>() / 1000;
-    }
-    if ( interval < 1 ) {
-        interval = 1;
+        interval = params["checkInterval"].as<unsigned int>() / 1000;
     }
     ReplicaSetMonitor::setSleepSecs(interval);
+    out() << "sleepSecs: " << ReplicaSetMonitor::getSleepSecs() << endl;
+
+    int maxCheckFailures = 3;
+    if ( params.count ( "maxCheckFailures" ) ) {
+        maxCheckFailures = params["maxCheckFailures"].as<unsigned int>();
+    }
+    ReplicaSetMonitor::setMaxCheckFailures(maxCheckFailures);
+    out() << "maxCheckFailures: " << ReplicaSetMonitor::getMaxCheckFailures() << endl;
 
     // set some global state
 

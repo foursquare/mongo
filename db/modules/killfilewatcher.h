@@ -36,7 +36,7 @@ namespace mongo {
 
        bool fileExists() const;
 
-       void config( program_options::variables_map& params );
+       bool config( program_options::variables_map& params );
 
        string name() const;
 

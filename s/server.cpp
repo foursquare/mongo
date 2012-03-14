@@ -300,14 +300,14 @@ int _main(int argc, char* argv[]) {
     // set health check options
     int interval = 10;
     if ( params.count ( "checkInterval" ) ) {
-        interval = params["checkInterval"].as<unsigned int>();
+        interval = params["checkInterval"].as<int>();
     }
     ReplicaSetMonitor::setSleepSecs(interval);
     out() << "sleepSecs: " << ReplicaSetMonitor::getSleepSecs() << endl;
 
     int maxCheckFailures = 3;
     if ( params.count ( "maxCheckFailures" ) ) {
-        maxCheckFailures = params["maxCheckFailures"].as<unsigned int>();
+        maxCheckFailures = params["maxCheckFailures"].as<int>();
     }
     ReplicaSetMonitor::setMaxCheckFailures(maxCheckFailures);
     out() << "maxCheckFailures: " << ReplicaSetMonitor::getMaxCheckFailures() << endl;

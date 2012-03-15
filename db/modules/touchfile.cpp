@@ -21,7 +21,7 @@
 #include "../../util/background.h"
 #include "../../util/file.h"
 #include "../../util/log.h"
-#include "../../util/net/listen.h"
+#include "../../util/timer.h"
 #include "touchfile.h"
 
 namespace po = boost::program_options;
@@ -51,7 +51,7 @@ namespace mongo {
             sleepsecs( 1 );
 
             try {
-                time_t touchStarted = Listener::getElapsedTimeMillis();
+                Timer t;
                 File f;
                 // 4 chunks of 256kb.  should hit every stripe in a 4 drive raid0
                 const unsigned BLKSZ = 256 * 1024;
@@ -81,7 +81,7 @@ namespace mongo {
                 }
 
                 f.fsync();
-                _lastTouchElapsedMs = Listener::getElapsedTimeMillis() - touchStarted;
+                _lastTouchElapsedMs = t.millis();
                 _lastTouchTimestamp = time(0);
             }
             catch ( std::exception& e ) {

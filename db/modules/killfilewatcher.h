@@ -22,6 +22,7 @@
 #include "../instance.h"
 #include "../module.h"
 #include "../../util/background.h"
+#include "../../util/concurrency/rwlock.h"
 #include "../commands.h"
 
 #include <ctime>
@@ -52,12 +53,12 @@ namespace mongo {
 
     private:
         // Called on any transition.
-        void handleChange(bool oldValue, bool newValue);
+        void handleChange_inWriteLock(bool oldValue, bool newValue);
         // Called every time we check and the kill file exists, even when it
         // continues to exist.
-        void handleKilled();
+        void handleKilled_inWriteLock();
 
-        void tryStepDownIfApplicable();
+        void tryStepDownIfApplicable_inWriteLock();
 
         // These two fields are command-line configured parameters.
         string _path;
@@ -80,6 +81,11 @@ namespace mongo {
         // whether we successfully stepped down so, if we didn't, we can try
         // again.
         bool _hasSteppedDown;
+
+        // Read-write lock to control access to member variables. The only
+        // exceptions are reading _path and _killFileShouldTriggerStepDown
+        // since those are initialized once and never mutated after.
+        RWLock _lock;
     };
 
     extern KillFileWatcher killFileWatcher;

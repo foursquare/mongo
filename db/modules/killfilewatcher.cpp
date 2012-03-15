@@ -63,7 +63,7 @@ namespace mongo {
     KillFileWatcher::KillFileWatcher()
       : Module("KillFileWatcher"), _path(), _killFileShouldTriggerStepDown(false),
         _isKilled(false), _killFileContents(), _numChecksSinceChange(0),
-        _timeOfLastChange(0), _hasSteppedDown(false) {
+        _timeOfLastChange(0), _hasSteppedDown(false), _lock("KillFileWatcher") {
 
       add_options()
          ( "kill-file-path" ,
@@ -76,8 +76,12 @@ namespace mongo {
 
    KillFileWatcher::~KillFileWatcher() {}
 
-   bool KillFileWatcher::isKilled() const { return _isKilled; }
+   bool KillFileWatcher::isKilled() const {
+       rwlock lk(_lock, false);
+       return _isKilled;
+   }
    bool KillFileWatcher::isForcedToNotBePrimary() const {
+       rwlock lk(_lock, false);
        if (_isKilled && _killFileShouldTriggerStepDown) {
            return true;
        } else {
@@ -85,10 +89,13 @@ namespace mongo {
        }
    }
    string KillFileWatcher::contentsOfKillFile() const {
+       rwlock lk(_lock, false);
        return _killFileContents;
    }
 
    bool KillFileWatcher::config(program_options::variables_map& params) {
+      rwlock lk(_lock, true);
+
       if (params.count("kill-file-path") > 0) {
         _path = params["kill-file-path"].as<string>();
 
@@ -112,7 +119,7 @@ namespace mongo {
 
     string KillFileWatcher::name() const { return "KillFileWatcher"; }
 
-    void KillFileWatcher::tryStepDownIfApplicable() {
+    void KillFileWatcher::tryStepDownIfApplicable_inWriteLock() {
         if (_isKilled && replSet && theReplSet && theReplSet->isPrimary() &&
             _killFileShouldTriggerStepDown && !_hasSteppedDown) {
             // step down
@@ -132,7 +139,7 @@ namespace mongo {
         }
     }
 
-    void KillFileWatcher::handleChange(bool oldValue, bool newValue) {
+    void KillFileWatcher::handleChange_inWriteLock(bool oldValue, bool newValue) {
         _hasSteppedDown = false;
         _numChecksSinceChange = 0;
         _timeOfLastChange = Listener::getElapsedTimeMillis();
@@ -151,14 +158,14 @@ namespace mongo {
               << endl;
 
         if (newValue) {
-          tryStepDownIfApplicable();
+          tryStepDownIfApplicable_inWriteLock();
         }
     }
 
-    void KillFileWatcher::handleKilled() {
+    void KillFileWatcher::handleKilled_inWriteLock() {
         ++_numChecksSinceChange;
         if ((_numChecksSinceChange % 60) == 0) {
-            tryStepDownIfApplicable();
+            tryStepDownIfApplicable_inWriteLock();
 
             log() << "kill file has existed for "
                   << ((Listener::getElapsedTimeMillis() - _timeOfLastChange) / 1000)
@@ -188,14 +195,18 @@ namespace mongo {
             sleepsecs( 1 );
 
             try {
-                bool previousValue = _isKilled;
+                bool previousValue = isKilled();
                 bool newValue = boost::filesystem::exists(_path);
-                if (newValue != previousValue) {
-                    handleChange(previousValue, newValue);
-                }
+                if (newValue || (newValue != previousValue)) {
+                    rwlock lk(_lock, true);
 
-                if (newValue) {
-                    handleKilled();
+                    if (newValue != previousValue) {
+                        handleChange_inWriteLock(previousValue, newValue);
+                    }
+
+                    if (newValue) {
+                        handleKilled_inWriteLock();
+                    }
                 }
             }
             catch ( std::exception& e ) {

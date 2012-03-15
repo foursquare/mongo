@@ -1,4 +1,4 @@
-// @file killfilewatcher.cpp
+// @file KillFileWatcher.cpp
 /*
  *    Copyright (C) 2010 10gen Inc.
  *
@@ -32,14 +32,14 @@ namespace po = boost::program_options;
 namespace mongo {
 
     KillFileWatcher::KillFileWatcher()
-      : Module( "killfilewatcher" ), _path( "" ), _killFileShouldTriggerStepDown(false),
+      : Module( "KillFileWatcher" ), _path( "" ), _killFileShouldTriggerStepDown(false),
         _isKilled(false), _numChecksSinceChange(0), _timeOfLastChange(0),
         _hasSteppedDown(false) {
 
       add_options()
          ( "kill-file-path" ,
            po::value<string>() ,
-           "absolute path of kill-file to watch for health checking. if unset, no kill-file is monitored" )
+           "absolute path of kill-file to watch for health checking. if unset, kill.<port> under dbpath will be monitored" )
          ( "kill-file-should-trigger-step-down" ,
            "if specified, then the presence of a kill-file will tell the mongod to step down, if it's the master.")
          ;
@@ -60,11 +60,15 @@ namespace mongo {
       if (params.count("kill-file-path") > 0) {
         _path = params["kill-file-path"].as<string>();
 
-        // in newer versions of boost, is_complete is renamed to is_absolute, but we don't have that yet.
+        // in newer versions odf boost, is_complete is renamed to is_absolute, but we don't have that yet.
         if (!boost::filesystem::path(_path).is_complete()) {
           log(LL_ERROR) << "kill-file-path must be absolute! bailing since we got " << _path << endl;
           return false;
         }
+      } else {
+        stringstream ss;
+        ss << "kill." << cmdLine.port;
+        _path = (boost::filesystem::path(dbpath) / ss.str()).native_file_string();
       }
 
       if (params.count("kill-file-should-trigger-step-down") > 0) {
@@ -74,7 +78,7 @@ namespace mongo {
       return true;
    }
 
-    string KillFileWatcher::name() const { return "killfilewatcher"; }
+    string KillFileWatcher::name() const { return "KillFileWatcher"; }
 
     void KillFileWatcher::tryStepDownIfApplicable() {
         if (_isKilled && replSet && theReplSet && theReplSet->isPrimary() &&
@@ -104,7 +108,7 @@ namespace mongo {
 
         log() << "kill-file monitor starting and monitoring path " << _path << endl;
 
-        Client::initThread( "killfilewatcher" );
+        Client::initThread( "KillFileWatcher" );
 
         while ( ! inShutdown() ) {
             sleepsecs( 1 );
@@ -137,7 +141,7 @@ namespace mongo {
                 }
             }
             catch ( std::exception& e ) {
-                log(LL_ERROR) << "killfilewatcher exception: " << e.what() << endl;
+                log(LL_ERROR) << "KillFileWatcher exception: " << e.what() << endl;
             }
         }
     }

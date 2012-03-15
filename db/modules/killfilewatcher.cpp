@@ -29,12 +29,41 @@
 
 namespace po = boost::program_options;
 
+static string statusString(bool killed, const string& contents) {
+    std::stringstream ss;
+    if (killed) {
+        ss << "KILLED";
+        if (contents.size() != 0) {
+            ss << " ('" << contents << "')";
+        }
+    } else {
+        ss << "OK";
+    }
+    return ss.str();
+}
+
+static string readInKillFileContents(const string& path) {
+    string out;
+    std::ifstream stream(path.c_str());
+    if (!stream.good()) {
+        mongo::log() << "kill file exists, but unable to read its contents" << std::endl;
+    } else {
+        std::stringstream ss;
+        ss << stream.rdbuf();
+        out = ss.str();
+        // STL's weird way of removing all \n's from a string.
+        out.erase(remove(out.begin(), out.end(), '\n'), out.end());
+    }
+    stream.close();
+    return out;
+}
+
 namespace mongo {
 
     KillFileWatcher::KillFileWatcher()
-      : Module( "KillFileWatcher" ), _path( "" ), _killFileShouldTriggerStepDown(false),
-        _isKilled(false), _numChecksSinceChange(0), _timeOfLastChange(0),
-        _hasSteppedDown(false) {
+      : Module("KillFileWatcher"), _path(), _killFileShouldTriggerStepDown(false),
+        _isKilled(false), _killFileContents(), _numChecksSinceChange(0),
+        _timeOfLastChange(0), _hasSteppedDown(false) {
 
       add_options()
          ( "kill-file-path" ,
@@ -55,8 +84,11 @@ namespace mongo {
            return false;
        }
    }
+   string KillFileWatcher::contentsOfKillFile() const {
+       return _killFileContents;
+   }
 
-   bool KillFileWatcher::config( program_options::variables_map& params ) {
+   bool KillFileWatcher::config(program_options::variables_map& params) {
       if (params.count("kill-file-path") > 0) {
         _path = params["kill-file-path"].as<string>();
 
@@ -100,50 +132,78 @@ namespace mongo {
         }
     }
 
+    void KillFileWatcher::handleChange(bool oldValue, bool newValue) {
+        _hasSteppedDown = false;
+        _numChecksSinceChange = 0;
+        _timeOfLastChange = Listener::getElapsedTimeMillis();
+        _isKilled = newValue;
+
+        string oldContents = _killFileContents;
+        _killFileContents = "";
+
+        if (newValue) {
+            _killFileContents = readInKillFileContents(_path);
+        }
+
+        log() << "kill file status changed! "
+              << "before: " << statusString(oldValue, oldContents) << ". "
+              << "now: " << statusString(newValue, _killFileContents)
+              << endl;
+
+        if (newValue) {
+          tryStepDownIfApplicable();
+        }
+    }
+
+    void KillFileWatcher::handleKilled() {
+        ++_numChecksSinceChange;
+        if ((_numChecksSinceChange % 60) == 0) {
+            tryStepDownIfApplicable();
+
+            log() << "kill file has existed for "
+                  << ((Listener::getElapsedTimeMillis() - _timeOfLastChange) / 1000)
+                  << " seconds. "
+                  << statusString(_isKilled, _killFileContents)
+                  << endl;
+
+        }
+
+        // Update the contents of the string in case the reason changes over
+        // time but the file stays around.
+        _killFileContents = readInKillFileContents(_path);
+    }
+
     void KillFileWatcher::run() {
-        if ( _path.size() == 0 ) {
+        if (_path.size() == 0) {
             log() << "KillFileWatcher not configured" << endl;
             return;
         }
 
-        log() << "kill-file monitor starting and monitoring path " << _path << endl;
+        log() << "KillFileWatcher starting and monitoring path " << _path << endl;
 
-        Client::initThread( "KillFileWatcher" );
+        Client::initThread("KillFileWatcher");
+        Client& c = cc();
 
         while ( ! inShutdown() ) {
             sleepsecs( 1 );
 
             try {
                 bool previousValue = _isKilled;
-                _isKilled = boost::filesystem::exists(_path);
-                if (_isKilled != previousValue) {
-                    _hasSteppedDown = false;
-                    _numChecksSinceChange = 0;
-                    _timeOfLastChange = Listener::getElapsedTimeMillis();
+                bool newValue = boost::filesystem::exists(_path);
+                if (newValue != previousValue) {
+                    handleChange(previousValue, newValue);
+                }
 
-                    log() << "kill file status changed! "
-                          << "before: " << (previousValue ? "KILLED. " : "OK. ")
-                          << "now: " << (_isKilled ? "KILLED. " : "OK. ")
-                          << endl;
-
-                    if (_isKilled) {
-                      tryStepDownIfApplicable();
-                    }
-                } else if (_isKilled) {
-                    tryStepDownIfApplicable();
-
-                    ++_numChecksSinceChange;
-                    if ((_numChecksSinceChange % 60) == 0) {
-                        log() << "still in KILLED state. kill file has existed for "
-                              << ((Listener::getElapsedTimeMillis() - _timeOfLastChange) / 1000)
-                              << " seconds" << endl;
-                    }
+                if (newValue) {
+                    handleKilled();
                 }
             }
             catch ( std::exception& e ) {
                 log(LL_ERROR) << "KillFileWatcher exception: " << e.what() << endl;
             }
         }
+
+        c.shutdown();
     }
 
     void KillFileWatcher::init() {

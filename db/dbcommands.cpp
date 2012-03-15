@@ -454,15 +454,20 @@ namespace mongo {
 
                 bool killFileExists = killFileWatcher.isKilled();
                 if (killFileExists) {
-                  healthy = false;
-                  msg = "kill file is present, forcing unhealthy status";
+                    healthy = false;
+                    string killFileContents = killFileWatcher.contentsOfKillFile();
+                    if (killFileContents.size() == 0) {
+                        msg = "kill file is present, forcing unhealthy status";
+                    } else {
+                        msg = "kill file is present, forcing unhealthy status: " + killFileContents;
+                    }
                 } else if ( touchFile.lastTouchElapsedMs() > 100 ) {
-                  // TODO(jon) how to handle flapping?
-                  healthy = false;
-                  msg = "touchFile took more than 100ms";
+                    // TODO(jon) how to handle flapping?
+                    healthy = false;
+                    msg = "touchFile took more than 100ms";
                 } else if ( (time(0) - touchFile.lastTouchTimestamp()) > 3 ) {
-                  healthy = false;
-                  msg = "last touchFile poll was more than 3 seconds ago";
+                    healthy = false;
+                    msg = "last touchFile poll was more than 3 seconds ago";
                 }
 
                 health.append("ok", healthy);

@@ -39,8 +39,9 @@ namespace mongo {
 
         bool isKilled() const;
         bool isForcedToNotBePrimary() const;
+        string contentsOfKillFile() const;
 
-        bool config( program_options::variables_map& params );
+        bool config(program_options::variables_map& params);
 
         string name() const;
 
@@ -50,6 +51,12 @@ namespace mongo {
         void shutdown();
 
     private:
+        // Called on any transition.
+        void handleChange(bool oldValue, bool newValue);
+        // Called every time we check and the kill file exists, even when it
+        // continues to exist.
+        void handleKilled();
+
         void tryStepDownIfApplicable();
 
         // These two fields are command-line configured parameters.
@@ -59,6 +66,9 @@ namespace mongo {
         // These fields represent the current state of the watcher.
         // Whether the kill file currently exists.
         bool _isKilled;
+        // If we're killed, the contents of the kill file, so we can add it to
+        // logs and such.
+        string _killFileContents;
         // How many times we've checked and the kill file has still existed (so
         // we can log reminders, and try to take action periodically if our
         // first attempt failed).

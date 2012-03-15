@@ -49,8 +49,6 @@
 #include "../s/d_writeback.h"
 #include "dur_stats.h"
 #include "modules/killfilewatcher.h"
-#include "modules/touchfile.h"
-#include "modules/healthbinary.h"
 
 namespace mongo {
 
@@ -461,22 +459,11 @@ namespace mongo {
                     } else {
                         msg = "kill file is present, forcing unhealthy status: " + killFileContents;
                     }
-                } else if ( touchFile.lastTouchElapsedMs() > 100 ) {
-                    // TODO(jon) how to handle flapping?
-                    healthy = false;
-                    msg = "touchFile took more than 100ms";
-                } else if ( (time(0) - touchFile.lastTouchTimestamp()) > 3 ) {
-                    healthy = false;
-                    msg = "last touchFile poll was more than 3 seconds ago";
                 }
 
                 health.append("ok", healthy);
                 health.append("msg", msg);
                 health.append("killFile", killFileExists);
-                health.append("healthBinaryOk", healthBinary.ok());
-                health.append("healthBinaryMessage", healthBinary.message());
-                health.append("diskTouchMs", (double)touchFile.lastTouchElapsedMs());
-                health.append("lastTouchTimestamp", (double)touchFile.lastTouchTimestamp());
 
                 result.append("healthStatus", health.obj());
             }

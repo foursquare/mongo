@@ -50,6 +50,7 @@
 #include "dur_stats.h"
 #include "modules/killfilewatcher.h"
 #include "modules/touchfile.h"
+#include "modules/healthbinary.h"
 
 namespace mongo {
 
@@ -467,6 +468,8 @@ namespace mongo {
                 health.append("ok", healthy);
                 health.append("msg", msg);
                 health.append("killFile", killFileExists);
+                health.append("healthBinaryOk", healthBinary.ok());
+                health.append("healthBinaryMessage", healthBinary.message());
                 health.append("diskTouchMs", (double)touchFile.lastTouchElapsedMs());
                 health.append("lastTouchTimestamp", (double)touchFile.lastTouchTimestamp());
 

@@ -23,31 +23,31 @@
 namespace mongo {
 
     /** touchfile writer.
-        will periodically write to a <dbpath>/touchfile to measure time
-        as a proxy for disk health
-    */
+      will periodically write to a <dbpath>/touchfile to measure time
+      as a proxy for disk health
+      */
     class TouchFile : public BackgroundJob , Module {
-    public:
+        public:
 
-       TouchFile();
-       ~TouchFile();
+            TouchFile();
+            ~TouchFile();
 
-       time_t lastTouchElapsedMs() const;
-       time_t lastTouchTimestamp() const;
+            time_t lastTouchElapsedMs() const;
+            time_t lastTouchTimestamp() const;
 
-       bool config( program_options::variables_map& params );
+            bool config( program_options::variables_map& params );
 
-       string name() const;
+            string name() const;
 
-       void run();
+            void run();
 
-       void init();
+            void init();
 
-       void shutdown();
+            void shutdown();
 
-    private:
-       time_t _lastTouchElapsedMs;
-       time_t _lastTouchTimestamp;
+        private:
+            time_t _lastTouchElapsedMs;
+            time_t _lastTouchTimestamp;
     };
 
     extern TouchFile touchFile;

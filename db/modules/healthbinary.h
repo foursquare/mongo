@@ -26,35 +26,35 @@
 namespace mongo {
 
     /** Kill file watcher.
-        If enabled, this checks for existence of a kill file.
-    */
+      If enabled, this checks for existence of a kill file.
+      */
     class HealthBinary : public BackgroundJob , Module {
-    public:
+        public:
 
-       HealthBinary();
-       ~HealthBinary();
+            HealthBinary();
+            ~HealthBinary();
 
-       bool ok() const;
-       string message() const;
-       time_t lastRunMs() const;
-       time_t lastRunTimestamp() const;
+            bool ok() const;
+            string message() const;
+            time_t lastRunMs() const;
+            time_t lastRunTimestamp() const;
 
-       bool config( program_options::variables_map& params );
+            bool config( program_options::variables_map& params );
 
-       string name() const;
+            string name() const;
 
-       void run();
+            void run();
 
-       void init();
+            void init();
 
-       void shutdown();
+            void shutdown();
 
-    private:
-       string _path;
-       bool _ok;
-       string _message;
-       time_t _lastRunMs;
-       time_t _lastRunTimestamp;
+        private:
+            string _path;
+            bool _ok;
+            string _message;
+            time_t _lastRunMs;
+            time_t _lastRunTimestamp;
     };
 
     extern HealthBinary healthBinary;

@@ -29,18 +29,18 @@ namespace po = boost::program_options;
 namespace mongo {
 
     TouchFile::TouchFile()
-      : Module( "touchfile" ), _lastTouchElapsedMs(0), _lastTouchTimestamp(0)  {
-    }
+        : Module( "touchfile" ), _lastTouchElapsedMs(0), _lastTouchTimestamp(0)  {
+        }
 
     TouchFile::~TouchFile() {}
 
     string TouchFile::name() const { return "touchfile"; }
-    
+
     time_t TouchFile::lastTouchElapsedMs() const { return _lastTouchElapsedMs; }
     time_t TouchFile::lastTouchTimestamp() const { return _lastTouchTimestamp; }
-    
+
     bool TouchFile::config( program_options::variables_map& params ) {
-       return true;
+        return true;
     }
 
     void TouchFile::run() {
@@ -65,8 +65,8 @@ namespace mongo {
                     char mybuffer[ BLKSZ ];
                     memset(mybuffer, 0, sizeof(mybuffer));
                     while ( loc / BLKSZ < CHUNKS ) {
-                       f.write( loc , mybuffer , BLKSZ );
-                       loc += BLKSZ;
+                        f.write( loc , mybuffer , BLKSZ );
+                        loc += BLKSZ;
                     }
                 } else {
                     // file already exists, so do sparse writes
@@ -75,8 +75,8 @@ namespace mongo {
                     char mybuffer[ SMALL_BLKSZ ];
                     memset(mybuffer, 1, sizeof(mybuffer));
                     while ( i < CHUNKS ) {
-                       f.write( i * BLKSZ , mybuffer , SMALL_BLKSZ );
-                       i++;
+                        f.write( i * BLKSZ , mybuffer , SMALL_BLKSZ );
+                        i++;
                     }
                 }
 
@@ -91,7 +91,7 @@ namespace mongo {
     }
 
     void TouchFile::init() {
-      go();
+        go();
     }
 
     void TouchFile::shutdown() {

@@ -25,8 +25,9 @@
 
 namespace mongo {
 
-    /** Kill file watcher.
-      If enabled, this checks for existence of a kill file.
+    /** health binary poller.
+      If enabled this periodically monitors the result of a binary.
+      Non-0 exit codes mean bad health
       */
     class HealthBinary : public BackgroundJob , Module {
         public:

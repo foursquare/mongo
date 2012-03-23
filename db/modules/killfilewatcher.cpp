@@ -82,11 +82,7 @@ namespace mongo {
    }
    bool KillFileWatcher::isForcedToNotBePrimary() const {
        rwlock lk(_lock, false);
-       if (_isKilled && _killFileShouldTriggerStepDown) {
-           return true;
-       } else {
-           return false;
-       }
+       return _isKilled && _killFileShouldTriggerStepDown;
    }
    string KillFileWatcher::contentsOfKillFile() const {
        rwlock lk(_lock, false);
@@ -164,7 +160,7 @@ namespace mongo {
 
     void KillFileWatcher::handleKilled_inWriteLock() {
         ++_numChecksSinceChange;
-        if ((_numChecksSinceChange % 60) == 0) {
+        if ((_numChecksSinceChange % 1) == 0) {
             tryStepDownIfApplicable_inWriteLock();
 
             log() << "kill file has existed for "

@@ -122,6 +122,7 @@ namespace mongo {
             if( v > cmdObj["v"].Int() )
                 result << "config" << theReplSet->config().asBson();
 
+            result.append("killFile", theReplSet->killFile());
             return true;
         }
     } cmdReplSetHeartbeat;
@@ -269,6 +270,10 @@ namespace mongo {
                     mem.hbstate = MemberState(state.Int());
             }
 
+            if ( info.hasElement("killFile") ) {
+                mem.killFile = info["killFile"].trueValue();
+            }
+
             return ok;
         }
 
@@ -309,7 +314,7 @@ namespace mongo {
                 mem.opTime = info["opTime"].Date();
 
             // see if this member is in the electable set
-            if( info["e"].eoo() ) {
+            if( info["e"].eoo() && !mem.killFile ) {
                 // for backwards compatibility
                 const Member *member = theReplSet->findById(mem.id());
                 if (member && member->config().potentiallyHot()) {
@@ -321,7 +326,7 @@ namespace mongo {
             }
             // add this server to the electable set if it is within 10
             // seconds of the latest optime we know of
-            else if( info["e"].trueValue() &&
+            else if( info["e"].trueValue() && !mem.killFile &&
                      mem.opTime >= theReplSet->lastOpTimeWritten.getSecs() - 10) {
                 unsigned lastOp = theReplSet->lastOtherOpTime().getSecs();
                 if (lastOp > 0 && mem.opTime >= lastOp - 10) {

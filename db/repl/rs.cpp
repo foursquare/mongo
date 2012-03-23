@@ -117,6 +117,10 @@ namespace mongo {
         return max;
     }
 
+    bool ReplSetImpl::hasElectable() const {
+        return !_electableSet.empty();
+    }
+
     const bool closeOnRelinquish = true;
 
     void ReplSetImpl::relinquish() {
@@ -213,6 +217,10 @@ namespace mongo {
         elect.steppedDown <= time(0) && // not stepped down/frozen
         state() == MemberState::RS_SECONDARY && // not stale
         !killFileWatcher.isForcedToNotBePrimary(); // no manual kill-file
+    }
+
+    bool ReplSetImpl::killFile() const {
+      return killFileWatcher.isKilled();
     }
 
     void ReplSetImpl::_fillIsMasterHost(const Member *m, vector<string>& hosts, vector<string>& passives, vector<string>& arbiters) {
@@ -710,6 +718,12 @@ namespace mongo {
     }
 
     bool ReplSet::isSafeToStepDown(string& errmsg, BSONObjBuilder& detailedResponse) {
+        // check for killfile on other secondaries
+        if ( !hasElectable() ) {
+            log() << "no electable secondaries! not safe to step down" << rsLog;
+            return false;
+        }
+
         long long int lastOp = (long long int)theReplSet->lastOpTimeWritten.getSecs();
         long long int closest = (long long int)theReplSet->lastOtherOpTime().getSecs();
 

@@ -70,7 +70,7 @@ namespace mongo {
         unsigned _id;
     public:
         HeartbeatInfo() : _id(0xffffffff), hbstate(MemberState::RS_UNKNOWN), health(-1.0),
-          downSince(0), skew(INT_MIN), authIssue(false) { }
+          downSince(0), skew(INT_MIN), authIssue(false), killFile(false) { }
         HeartbeatInfo(unsigned id);
         unsigned id() const { return _id; }
         MemberState hbstate;
@@ -83,6 +83,7 @@ namespace mongo {
         int skew;
         bool authIssue;
         unsigned int ping; // milliseconds
+        bool killFile;
         static unsigned int numPings;
 
         bool up() const { return health > 0; }
@@ -96,7 +97,7 @@ namespace mongo {
         bool changed(const HeartbeatInfo& old) const;
     };
 
-    inline HeartbeatInfo::HeartbeatInfo(unsigned id) : _id(id), authIssue(false) {
+    inline HeartbeatInfo::HeartbeatInfo(unsigned id) : _id(id), authIssue(false), killFile(false) {
         hbstate = MemberState::RS_UNKNOWN;
         health = -1.0;
         downSince = 0;

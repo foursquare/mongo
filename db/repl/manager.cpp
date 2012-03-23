@@ -82,7 +82,7 @@ namespace mongo {
 
     void Manager::checkElectableSet() {
         unsigned otherOp = rs->lastOtherOpTime().getSecs();
-        
+
         // make sure the electable set is up-to-date
         if (rs->elect.aMajoritySeemsToBeUp() &&
             rs->iAmPotentiallyHot() &&
@@ -96,7 +96,7 @@ namespace mongo {
         // check if we should ask the primary (possibly ourselves) to step down
         const Member *highestPriority = theReplSet->getMostElectable();
         const Member *primary = rs->box.getPrimary();
-        
+
         if (primary && highestPriority &&
             highestPriority->config().priority > primary->config().priority) {
             log() << "stepping down " << primary->fullName() << endl;
@@ -161,7 +161,7 @@ namespace mongo {
             RSBase::lock lk(rs);
 
             if( busyWithElectSelf ) return;
-            
+
             checkElectableSet();
             checkAuth();
 
@@ -237,7 +237,7 @@ namespace mongo {
 
             if( !rs->iAmPotentiallyHot() ) // if not we never try to be primary
                 return;
-            
+
             /* no one seems to be primary.  shall we try to elect ourself? */
             if( !rs->elect.aMajoritySeemsToBeUp() ) {
                 static time_t last;

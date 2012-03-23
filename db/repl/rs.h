@@ -372,6 +372,7 @@ namespace mongo {
          *  2. has a priority greater than 0
          *  3. has an optime within 10 seconds of the most up-to-date node
          *     that n can reach
+         *  4. does not have a killfile set
          *
          * If a node fails to meet one or more of these criteria, it is removed
          * from the list.  This list is updated whenever the node receives a
@@ -394,6 +395,8 @@ namespace mongo {
         bool iAmElectable() { lock lk(this); return _electableSet.find(_self->id()) != _electableSet.end(); }
         bool isElectable(const unsigned id) { lock lk(this); return _electableSet.find(id) != _electableSet.end(); }
         Member* getMostElectable();
+        bool killFile() const;
+
     protected:
         /**
          * Load a new config as the replica set's main config.
@@ -424,6 +427,7 @@ namespace mongo {
 
         /* call afer constructing to start - returns fairly quickly after launching its threads */
         void _go();
+        bool hasElectable() const;
 
     private:
         string _name;

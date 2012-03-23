@@ -59,6 +59,10 @@ namespace mongo {
                 return false;
             }
 
+            if (theReplSet->killFile()) {
+                return false;
+            }
+
             if (!hopeful || !theReplSet->isElectable(id) ||
                 (highestPriority && highestPriority->config().priority > hopeful->config().priority)) {
                 return true;

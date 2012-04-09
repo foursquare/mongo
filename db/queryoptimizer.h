@@ -89,8 +89,10 @@ namespace mongo {
         
         shared_ptr<FieldRangeVector> frv() const { return _frv; }
         bool isMultiKey() const;
+        bool queryFiniteSetOrderSuffix() const;
 
     private:
+        int independentRangesSingleIntervalLimit() const;
         NamespaceDetails * _d;
         int _idxNo;
         const FieldRangeSet &_frs;

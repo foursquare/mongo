@@ -92,6 +92,14 @@ namespace mongo {
         bool nontrivial() const;
         /** @return true iff this range matches no BSONElements. */
         bool empty() const { return _intervals.empty(); }
+        /**
+         * @return true in many cases when this FieldRange describes a finite set of BSONElements,
+         * all of which will be matched by the query BSONElement that generated this FieldRange.
+         * This attribute is used to implement higher level optimizations and is computed with a
+         * simple implementation that identifies common (but not all) cases satisfying the stated
+         * properties.
+         */
+        bool simpleFiniteSet() const { return _simpleFiniteSet; }
         
         /** Empty the range so it matches no BSONElements. */
         void makeEmpty() { _intervals.clear(); }
@@ -109,12 +117,14 @@ namespace mongo {
         string toString() const;
     private:
         BSONObj addObj( const BSONObj &o );
-        void finishOperation( const vector<FieldInterval> &newIntervals, const FieldRange &other );
+        void finishOperation( const vector<FieldInterval> &newIntervals, const FieldRange &other,
+                             bool simpleFiniteSet );
         vector<FieldInterval> _intervals;
         // Owns memory for our BSONElements.
         vector<BSONObj> _objData;
         string _special;
         bool _singleKey;
+        bool _simpleFiniteSet;
     };
 
     /**
@@ -161,6 +171,14 @@ namespace mongo {
          * @param keyPattern May be {} or {$natural:1} for a non index scan.
          */
         bool matchPossibleForIndex( const BSONObj &keyPattern ) const;
+        /**
+         * @return true in many cases when this FieldRangeSet describes a finite set of BSONObjs,
+         * all of which will be matched by the query BSONObj that generated this FieldRangeSet.
+         * This attribute is used to implement higher level optimizations and is computed with a
+         * simple implementation that identifies common (but not all) cases satisfying the stated
+         * properties.
+         */
+        bool simpleFiniteSet() const { return _simpleFiniteSet; }
         
         const char *ns() const { return _ns; }
         
@@ -209,6 +227,10 @@ namespace mongo {
         void makeEmpty();
         void processQueryField( const BSONElement &e, bool optimize );
         void processOpElement( const char *fieldName, const BSONElement &f, bool isNot, bool optimize );
+         /** Must be called when a match element is skipped or modified to generate a FieldRange. */
+         void adjustMatchField();
+         void intersectMatchField( const char *fieldName, const BSONElement &matchElement,
+                                  bool isNot, bool optimize );
         static FieldRange *__singleKeyTrivialRange;
         static FieldRange *__multiKeyTrivialRange;
         const FieldRange &trivialRange() const;
@@ -217,6 +239,7 @@ namespace mongo {
         // Owns memory for FieldRange BSONElements.
         vector<BSONObj> _queries;
         bool _singleKey;
+        bool _simpleFiniteSet;
     };
 
     class NamespaceDetails;
@@ -340,8 +363,14 @@ namespace mongo {
      */
     class FieldRangeVectorIterator {
     public:
-        FieldRangeVectorIterator( const FieldRangeVector &v ) : _v( v ), _i( _v._ranges.size(), -1 ), _cmp( _v._ranges.size(), 0 ), _inc( _v._ranges.size(), false ), _after() {
-        }
+        /**
+         * @param v - a FieldRangeVector representing matching keys.
+         * @param singleIntervalLimit - The maximum number of keys to match a single (compound)
+         *     interval before advancing to the next interval.  Limit checking is disabled if 0 and
+         *     must be disabled if v contains FieldIntervals that are not equality().
+         */
+        FieldRangeVectorIterator( const FieldRangeVector &v, int singleIntervalLimit );
+        
         static BSONObj minObject() {
             BSONObjBuilder b; b.appendMinKey( "" );
             return b.obj();
@@ -365,15 +394,41 @@ namespace mongo {
         const vector<bool> &inc() const { return _inc; }
         bool after() const { return _after; }
         void prepDive();
-        void setZero( int i ) { for( int j = i; j < (int)_i.size(); ++j ) _i[ j ] = 0; }
-        void setMinus( int i ) { for( int j = i; j < (int)_i.size(); ++j ) _i[ j ] = -1; }
-        bool ok() { return _i[ 0 ] < (int)_v._ranges[ 0 ].intervals().size(); }
+        /**
+         * Helper class representing a position within a vector of ranges.  Public for testing.
+         */
+        class CompoundRangeCounter {
+        public:
+            CompoundRangeCounter( int size, int singleIntervalLimit );
+            int size() const { return (int)_i.size(); }
+            int get( int i ) const { return _i[ i ]; }
+            void set( int i, int newVal );
+            void inc( int i );
+            void setZeroes( int i );
+            void setUnknowns( int i );
+            void incSingleIntervalCount() {
+                if ( isTrackingIntervalCounts() ) ++_singleIntervalCount;
+            }
+            bool hasSingleIntervalCountReachedLimit() const {
+                return isTrackingIntervalCounts() && _singleIntervalCount >= _singleIntervalLimit;
+            }
+            void resetIntervalCount() { _singleIntervalCount = 0; }
+          private:
+            bool isTrackingIntervalCounts() const { return _singleIntervalLimit > 0; }
+            vector<int> _i;
+            int _singleIntervalCount;
+            int _singleIntervalLimit;
+        };
+                
         BSONObj startKey();
         // temp
         BSONObj endKey();
     private:
+        bool hasReachedLimitForLastInterval( int intervalIdx ) const {
+            return _i.hasSingleIntervalCountReachedLimit() && ( intervalIdx + 1 == _i.size() );
+        }         
         const FieldRangeVector &_v;
-        vector<int> _i;
+        CompoundRangeCounter _i;
         vector<const BSONElement*> _cmp;
         vector<bool> _inc;
         bool _after;

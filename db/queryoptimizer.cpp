@@ -244,7 +244,9 @@ doneCheckOrder:
             return shared_ptr<Cursor>( BtreeCursor::make( _d, _idxNo, *_index, _frv->startKey(), _frv->endKey(), true, _direction >= 0 ? 1 : -1 ) );
         }
         else {
-            return shared_ptr<Cursor>( BtreeCursor::make( _d, _idxNo, *_index, _frv, _direction >= 0 ? 1 : -1 ) );
+            return shared_ptr<Cursor>( BtreeCursor::make( _d, _idxNo, *_index, _frv,
+                                                         independentRangesSingleIntervalLimit(),
+                                                         _direction >= 0 ? 1 : -1 ) );
         }
     }
 
@@ -327,6 +329,56 @@ doneCheckOrder:
             _hint = hint->wrap();
         }
         init();
+    }
+    
+    int QueryPlan::independentRangesSingleIntervalLimit() const {
+        if ( _scanAndOrderRequired &&
+            _parsedQuery &&
+            !_parsedQuery->wantMore() &&
+            !isMultiKey() &&
+            queryFiniteSetOrderSuffix() ) {
+            verify( 16111, _direction == 0 );
+            // Limit the results for each compound interval. SERVER-5063
+            return _parsedQuery->getSkip() + _parsedQuery->getNumToReturn();
+        }
+        return 0;
+    }
+    
+    bool QueryPlan::queryFiniteSetOrderSuffix() const {
+        if ( !indexed() ) {
+            return false;
+        }
+        if ( !_frs.simpleFiniteSet() ) {
+            return false;
+        }
+        BSONObj idxKey = indexKey();
+        BSONObjIterator index( idxKey );
+        BSONObjIterator order( _order );
+        int coveredNonUniversalRanges = 0;
+        while( index.more() ) {
+            if ( _frs.range( (*index).fieldName() ).nontrivial() ) {
+                break;
+            }
+            ++coveredNonUniversalRanges;
+            if ( order.more() && str::equals( (*index).fieldName(), (*order).fieldName() ) ) {
+                ++order;
+            }
+            ++index;
+        }
+        if ( coveredNonUniversalRanges != _frs.nNontrivialRanges() ) {
+            return false;
+        }
+        while( index.more() && order.more() ) {
+            if ( !str::equals( (*index).fieldName(), (*order).fieldName() ) ) {
+                return false;
+            }
+            if ( ( elementDirection( *index ) < 0 ) != ( elementDirection( *order ) < 0 ) ) {
+                return false;
+            }
+            ++order;
+            ++index;
+        }
+        return !order.more();
     }
 
     bool QueryPlanSet::modifiedKeys() const {

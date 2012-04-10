@@ -756,7 +756,7 @@ namespace QueryOptimizerTests {
                 BSONElement hintElt = hint.firstElement();
                 auto_ptr< FieldRangeSetPair > frsp2( new FieldRangeSetPair( ns(), BSON( "a" << 4 ) ) );
                 auto_ptr< FieldRangeSetPair > frspOrig2( new FieldRangeSetPair( *frsp2 ) );
-                QueryPlanSet s2( ns(), frsp2, frspOrig2, BSON( "a" << 4 ), BSON( "b" << 1 ), true, &hintElt );
+                QueryPlanSet s2( ns(), frsp2, frspOrig2, BSON( "a" << 4 ), BSON( "b" << 1 ),  shared_ptr<const ParsedQuery>(), true, &hintElt );
                 TestOp newOriginal;
                 s2.runOp( newOriginal );
                 // No plan recorded when a hint is used.
@@ -962,7 +962,7 @@ namespace QueryOptimizerTests {
                 auto_ptr< FieldRangeSetPair > frsp( new FieldRangeSetPair( ns(), query ) );
                 auto_ptr< FieldRangeSetPair > frspOrig( new FieldRangeSetPair( *frsp ) );
                 QueryPlanSet s( ns(), frsp, frspOrig, query, order,
-                    shared_ptr<const ParsedQuery>(), hint );
+                    shared_ptr<const ParsedQuery>(), true, hint );
                 QueryPlan qp( nsd(), 1, s.frsp(), s.originalFrsp(), query, order );
                 boost::shared_ptr<Cursor> c = qp.newCursor();
                 double expected[] = { 2, 3, 6, 9 };
@@ -977,7 +977,7 @@ namespace QueryOptimizerTests {
                   auto_ptr< FieldRangeSetPair > frsp( new FieldRangeSetPair( ns(), query ) );
                   auto_ptr< FieldRangeSetPair > frspOrig( new FieldRangeSetPair( *frsp ) );
                   QueryPlanSet s( ns(), frsp, frspOrig, query, order,
-                      shared_ptr<const ParsedQuery>(), hint );
+                      shared_ptr<const ParsedQuery>(), true, hint );
                   QueryPlan qp( nsd(), 1, s.frsp(), s.originalFrsp(), query, order );
                   boost::shared_ptr<Cursor> c = qp.newCursor();
                   double expected[] = { 9, 6, 3, 2 };

@@ -236,6 +236,14 @@ namespace mongo {
     };*/
 
     BtreeCursor* BtreeCursor::make(
+        NamespaceDetails *_d, const IndexDetails& _id,
+        const shared_ptr< FieldRangeVector > &_bounds, int _direction )
+    {
+        return make( _d, _d->idxNo( (IndexDetails&) _id), _id, _bounds, 0, _direction );
+    }
+    
+
+    BtreeCursor* BtreeCursor::make(
         NamespaceDetails *_d, int _idxNo, const IndexDetails& _id, 
         const BSONObj &startKey, const BSONObj &endKey, bool endKeyInclusive, int direction) 
     { 

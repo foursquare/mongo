@@ -1461,7 +1461,7 @@ namespace mongo {
 
     BSONObj FieldRangeVectorIterator::startKey() {
         BSONObjBuilder b;
-        for( int unsigned i = 0; i < _i.size(); ++i ) {
+        for( int i = 0; i < (int)_i.size(); ++i ) {
             const FieldInterval &fi = _v._ranges[ i ].intervals()[ _i.get( i ) ];
             b.appendAs( fi._lower._bound, "" );
         }
@@ -1496,7 +1496,7 @@ namespace mongo {
     // temp
     BSONObj FieldRangeVectorIterator::endKey() {
         BSONObjBuilder b;
-        for( int unsigned i = 0; i < _i.size(); ++i ) {
+        for( int i = 0; i < (int)_i.size(); ++i ) {
             const FieldInterval &fi = _v._ranges[ i ].intervals()[ _i.get( i ) ];
             b.appendAs( fi._upper._bound, "" );
         }

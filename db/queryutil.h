@@ -90,6 +90,11 @@ namespace mongo {
         bool inQuery() const;
         /** @return true iff this range does not include every BSONElement */
         bool nontrivial() const;
+        /**
+         * @return true iff this range includes all BSONElements
+         * (the range is the universal set of BSONElements).
+         */
+        bool universal() const;
         /** @return true iff this range matches no BSONElements. */
         bool empty() const { return _intervals.empty(); }
         /**
@@ -157,6 +162,8 @@ namespace mongo {
         const FieldRange &range( const char *fieldName ) const;
         /** @return range for the given field. */
         FieldRange &range( const char *fieldName );
+        /** @return the number of non universal ranges. */
+        int numNonUniversalRanges() const;
         /** @return the number of nontrivial ranges. */
         int nNontrivialRanges() const;
         /** 

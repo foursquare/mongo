@@ -501,7 +501,7 @@ namespace mongo {
             }
         }
         // Forward simpleFiniteSet() when other is copied to *this.
-        bool simpleFiniteSet = nontrivial() && other.simpleFiniteSet();
+        bool simpleFiniteSet = universal() && other.simpleFiniteSet();
         finishOperation( newIntervals, other, simpleFiniteSet );
         return *this;
     }
@@ -627,6 +627,31 @@ namespace mongo {
         FieldRange temp = *this;
         temp -= other;
         return temp.empty();
+    }
+    
+    bool FieldRange::universal() const {
+        if ( empty() ) {
+            return false;
+        }
+        if ( minKey.firstElement().woCompare( min(), false ) != 0 ) {
+            return false;
+        }
+        if ( maxKey.firstElement().woCompare( max(), false ) != 0 ) {
+            return false;
+        }
+        // TODO ensure that adjacent intervals are not possible (the two intervals should be
+        // merged), and just determine if the range is universal by testing _intervals.size() == 1.
+        for ( unsigned i = 1; i < _intervals.size(); ++i ) {
+            const FieldBound &prev = _intervals[ i-1 ]._upper;
+            const FieldBound &curr = _intervals[ i ]._lower;
+            if ( !prev._inclusive && !curr._inclusive ) {
+                return false;
+            }
+            if ( prev._bound.woCompare( curr._bound ) < 0 ) {
+                return false;
+            }
+        }
+        return true;
     }
 
     void FieldRange::setExclusiveBounds() {
@@ -837,7 +862,8 @@ namespace mongo {
                     while( j.more() ) {
                         processQueryField( j.next(), optimize );
                     }
-                }            
+                }
+                return;
             }
             
             adjustMatchField();
@@ -1121,6 +1147,15 @@ namespace mongo {
         return ret;
     }
 
+    int FieldRangeSet::numNonUniversalRanges() const {
+        int count = 0;
+        for( map<string,FieldRange>::const_iterator i = _ranges.begin(); i != _ranges.end(); ++i ) {
+            if ( !i->second.universal() )
+                ++count;
+        }
+        return count;
+    }
+    
     FieldRangeSet *FieldRangeSet::subset( const BSONObj &fields ) const {
         FieldRangeSet *ret = new FieldRangeSet( _ns, BSONObj(), _singleKey, true );
         BSONObjIterator i( fields );

@@ -363,7 +363,7 @@ doneCheckOrder:
         BSONObjIterator order( _order );
         int coveredNonUniversalRanges = 0;
         while( index.more() ) {
-            if ( _frs.range( (*index).fieldName() ).nontrivial() ) {
+            if ( _frs.range( (*index).fieldName() ).universal() ) {
                 break;
             }
             ++coveredNonUniversalRanges;
@@ -372,7 +372,7 @@ doneCheckOrder:
             }
             ++index;
         }
-        if ( coveredNonUniversalRanges != _frs.nNontrivialRanges() ) {
+        if ( coveredNonUniversalRanges != _frs.numNonUniversalRanges() ) {
             return false;
         }
         while( index.more() && order.more() ) {

@@ -1349,11 +1349,13 @@ namespace mongo {
                 }
                 if ( x == 0 && _v._ranges[ i ].intervals()[ _i.get( i ) ]._upper._inclusive ) {
                     eq = true;
-                    break;
+                    if ( !hasReachedLimitForLastInterval( i ) ) {
+                      break;
+                    }
                 }
                 // see if we're less than the upper bound
                 if ( x > 0 ) {
-                    if ( i == 0 && first && !hasReachedLimitForLastInterval( i ) ) {
+                    if ( i == 0 && first ) {
                         // the value of 1st field won't go backward, so don't check lower bound
                         // TODO maybe we can check first only?
                         break;

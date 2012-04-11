@@ -996,6 +996,8 @@ namespace mongo {
         virtual ~BtreeCursor();
         /** makes an appropriate subclass depending on the index version */
         static BtreeCursor* make( NamespaceDetails *_d, int _idxNo, const IndexDetails&, const BSONObj &startKey, const BSONObj &endKey, bool endKeyInclusive, int direction );
+        static BtreeCursor* make( NamespaceDetails *_d, int _idxNo, const IndexDetails& _id, 
+                                  const shared_ptr< FieldRangeVector > &_bounds, int _direction );
         static BtreeCursor* make( NamespaceDetails *_d, const IndexDetails& _id, 
                                   const shared_ptr< FieldRangeVector > &_bounds, int _direction );
         static BtreeCursor* make( NamespaceDetails *_d, int _idxNo, const IndexDetails& _id, 

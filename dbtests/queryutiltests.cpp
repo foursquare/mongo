@@ -1074,6 +1074,80 @@ namespace QueryUtilTests {
     } // namespace FieldRangeSetPairTests
     
     namespace FieldRangeVectorIteratorTests {
+        class Base {
+            public:
+                virtual ~Base() {}
+                void run() {
+                    FieldRangeSet fieldRangeSet( "", query(), true );
+                    IndexSpec indexSpec( index(), BSONObj() );
+                    FieldRangeVector fieldRangeVector( fieldRangeSet, indexSpec, 1 );
+                    _iterator.reset( new FieldRangeVectorIterator( fieldRangeVector,
+                                                                  singleIntervalLimit() ) );
+                    _iterator->advance( fieldRangeVector.startKey() );
+                    _iterator->prepDive();
+                    check();
+                }
+            protected:
+                virtual BSONObj query() = 0;
+                virtual BSONObj index() = 0;
+                virtual int singleIntervalLimit() { return 0; }
+                virtual void check() = 0;
+                void assertAdvanceToNext( const BSONObj &current ) {
+                    ASSERT_EQUALS( -1, advance( current ) );
+                }
+                void assertAdvanceTo( const BSONObj &current, const BSONObj &target,
+                                     const BSONObj &inclusive = BSONObj() ) {
+                    int partition = advance( current );
+                    ASSERT( !iterator().after() );
+                    BSONObjBuilder advanceToBuilder;
+                    advanceToBuilder.appendElements( currentPrefix( current, partition ) );
+                    for( int i = partition; i < (int)iterator().cmp().size(); ++i ) {
+                        advanceToBuilder.append( *iterator().cmp()[ i ] );
+                    }
+                    assertEqualWithoutFieldNames( target, advanceToBuilder.obj() );
+                    if ( !inclusive.isEmpty() ) {
+                        BSONObjIterator inc( inclusive );
+                        for( int i = 0; i < partition; ++i ) inc.next();
+                        for( int i = partition; i < (int)iterator().inc().size(); ++i ) {
+                            ASSERT_EQUALS( inc.next().Bool(), iterator().inc()[ i ] );
+                        }
+                    }
+                }
+                void assertAdvanceToAfter( const BSONObj &current, const BSONObj &target ) {
+                    int partition = advance( current );
+                    ASSERT( iterator().after() );
+                    assertEqualWithoutFieldNames( target, currentPrefix( current, partition ) );
+                }
+                void assertDoneAdvancing( const BSONObj &current ) {
+                    ASSERT_EQUALS( -2, advance( current ) );
+                }
+            private:
+                static bool equalWithoutFieldNames( const BSONObj &one, const BSONObj &two ) {
+                    return one.woCompare( two, BSONObj(), false ) == 0;
+                }
+                static void assertEqualWithoutFieldNames( const BSONObj &one, const BSONObj &two ) {
+                    if ( !equalWithoutFieldNames( one, two ) ) {
+                        log() << one << " != " << two << endl;
+                        ASSERT( equalWithoutFieldNames( one, two ) );
+                    }
+                }
+                BSONObj currentPrefix( const BSONObj &current, int partition ) {
+                    ASSERT( partition >= 0 );
+                    BSONObjIterator currentIter( current );
+                    BSONObjBuilder prefixBuilder;
+                    for( int i = 0; i < partition; ++i ) {
+                        prefixBuilder.append( currentIter.next() );
+                    }
+                    return prefixBuilder.obj();
+                }
+                FieldRangeVectorIterator &iterator() { return *_iterator; }
+                int advance( const BSONObj &current ) {
+                    return iterator().advance( current );
+                }
+                scoped_ptr<FieldRangeVectorIterator> _iterator;
+        };
+        
+        
         namespace SingleIntervalLimit {
 
             class NoLimit : public Base {

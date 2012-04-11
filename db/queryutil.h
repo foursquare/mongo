@@ -420,17 +420,74 @@ namespace mongo {
                 return isTrackingIntervalCounts() && _singleIntervalCount >= _singleIntervalLimit;
             }
             void resetIntervalCount() { _singleIntervalCount = 0; }
-          private:
             bool isTrackingIntervalCounts() const { return _singleIntervalLimit > 0; }
+            bool getSingleIntervalLimit() const { return _singleIntervalLimit; }
+            bool getSingleIntervalCount() const { return _singleIntervalCount; }
+          private:
             vector<int> _i;
             int _singleIntervalCount;
             int _singleIntervalLimit;
         };
+
+         /**
+         * Helper class for matching a BSONElement with the bounds of a FieldInterval.  Some
+         * internal comparison results are cached. Public for testing.
+         */
+        class FieldIntervalMatcher {
+        public:
+            FieldIntervalMatcher( const FieldInterval &interval, const BSONElement &element,
+                                 bool reverse );
+            bool isEqInclusiveUpperBound() const {
+                return upperCmp() == 0 && _interval._upper._inclusive;
+            }
+            bool isGteUpperBound() const { return upperCmp() >= 0; }
+            bool isEqExclusiveLowerBound() const {
+                return lowerCmp() == 0 && !_interval._lower._inclusive;
+            }
+            bool isLtLowerBound() const { return lowerCmp() < 0; }
+        private:
+            struct BoundCmp {
+                BoundCmp() : _cmp(), _valid() {}
+                void set( int cmp ) { _cmp = cmp; _valid = true; }
+                int _cmp;
+                bool _valid;
+            };
+            int mayReverse( int val ) const { return _reverse ? -val : val; }
+            int cmp( const BSONElement &bound ) const {
+                return mayReverse( _element.woCompare( bound, false ) );
+            }
+            void setCmp( BoundCmp &boundCmp, const BSONElement &bound ) const {
+                boundCmp.set( cmp( bound ) );
+            }
+            int lowerCmp() const;
+            int upperCmp() const;
+            const FieldInterval &_interval;
+            const BSONElement &_element;
+            bool _reverse;
+            mutable BoundCmp _lowerCmp;
+            mutable BoundCmp _upperCmp;
+        };
+
                 
         BSONObj startKey();
         // temp
         BSONObj endKey();
     private:
+        /**
+         * @return values similar to advance()
+         *   -2 Iteration is complete for the current interval.
+         *   -1 Iteration is not complete for the current interval.
+         *  >=0 Return value to be forwarded by advance().
+         */
+        int validateCurrentInterval( int intervalIdx, const BSONElement &currElt,
+                                    bool reverse, bool first, bool &eqInclusiveUpperBound );
+        
+        /** Skip to curr / i / nextbounds. */
+        int advanceToLowerBound( int i );
+        /** Skip to curr / i / superlative. */
+        int advancePast( int i );
+        /** Skip to curr / i / superlative and reset following interval positions. */
+        int advancePastZeroed( int i );
         bool hasReachedLimitForLastInterval( int intervalIdx ) const {
             return _i.hasSingleIntervalCountReachedLimit() && ( intervalIdx + 1 == _i.size() );
         }         

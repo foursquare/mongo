@@ -724,6 +724,44 @@ namespace QueryUtilTests {
             virtual const bool *incs() const { static bool b[] = { false, true, true, false }; return b; }
             virtual BSONObj obj() const { return BSONObj(); }
         };
+
+        class Universal {
+        public:
+            void run() {
+                FieldRangeSet frs1( "", BSON( "a" << 1 ), true );
+                FieldRange f1 = frs1.range( "a" );
+                ASSERT( !f1.universal() );
+                ASSERT( frs1.range( "b" ).universal() );
+                
+                FieldRangeSet frs2( "", BSON( "a" << GT << 1 ), true );
+                FieldRange f2 = frs2.range( "a" );
+                ASSERT( !f2.universal() );
+
+                FieldRangeSet frs3( "", BSON( "a" << LT << 1 ), true );
+                FieldRange f3 = frs3.range( "a" );
+                ASSERT( !frs3.range( "a" ).universal() );
+
+                FieldRangeSet frs4( "", BSON( "a" << NE << 1 ), true );
+                FieldRange f4 = frs4.range( "a" );
+                ASSERT( !f4.universal() );
+
+                f1 |= f4;
+                ASSERT( f1.universal() );
+                f1 &= f2;
+                ASSERT( !f1.universal() );
+
+                FieldRangeSet frs5( "", BSON( "a" << GT << 1 << LTE << 2 ), true );
+                FieldRange f5 = frs5.range( "a" );
+                ASSERT( !f5.universal() );
+                
+                FieldRangeSet frs6( "", BSONObj(), true );
+                FieldRange f6 = frs6.range( "a" );
+                ASSERT( f6.universal() );
+                
+                f6 -= f5;
+                ASSERT( !f6.universal() );
+            }
+        };
         
         namespace SimpleFiniteSet {
 
@@ -1146,7 +1184,460 @@ namespace QueryUtilTests {
                 }
                 scoped_ptr<FieldRangeVectorIterator> _iterator;
         };
+
+        class AdvanceToNextIntervalEquality : public Base {
+            BSONObj query() { return fromjson( "{a:{$in:[0,1]}}" ); }
+            BSONObj index() { return BSON( "a" << 1 ); }
+            void check() {
+                assertAdvanceToNext( BSON( "a" << 0 ) );
+                assertAdvanceTo( BSON( "a" << 0.5 ), BSON( "a" << 1 ) );
+            }
+        };
         
+        class AdvanceToNextIntervalExclusiveInequality : public Base {
+            BSONObj query() { return fromjson( "{a:{$in:['a',/^q/,'z']}}" ); }
+            BSONObj index() { return BSON( "a" << 1 ); }
+            void check() {
+                assertAdvanceToNext( BSON( "a" << "a" ) );
+                assertAdvanceToNext( BSON( "a" << "q" ) );
+                assertAdvanceTo( BSON( "a" << "r" ), BSON( "a" << "z" ) );
+                assertAdvanceToNext( BSON( "a" << "z" ) );
+            }            
+        };
+
+        class AdvanceToNextIntervalEqualityReverse : public Base {
+            BSONObj query() { return fromjson( "{a:{$in:[0,1]}}" ); }
+            BSONObj index() { return BSON( "a" << -1 ); }
+            void check() {
+                assertAdvanceToNext( BSON( "a" << 1 ) );
+                assertAdvanceTo( BSON( "a" << 0.5 ), BSON( "a" << 0 ) );
+            }
+        };
+
+        class AdvanceToNextIntervalEqualityCompound : public Base {
+            BSONObj query() { return fromjson( "{a:{$in:[0,1]},b:{$in:[4,5]}}" ); }
+            BSONObj index() { return BSON( "a" << 1 << "b" << 1 ); }
+            void check() {
+                assertAdvanceToNext( BSON( "a" << 0 << "b" << 5 ) );
+                assertAdvanceToAfter( BSON( "a" << 0 << "b" << 6 ), BSON( "a" << 0 ) );
+                assertAdvanceTo( BSON( "a" << 1 << "b" << 2 ), BSON( "a" << 1 << "b" << 4 ) );
+                assertAdvanceToNext( BSON( "a" << 1 << "b" << 4 ) );
+                assertDoneAdvancing( BSON( "a" << 1 << "b" << 5.1 ) );
+            }            
+        };
+
+        class AdvanceToNextIntervalIntermediateEqualityCompound : public Base {
+            BSONObj query() { return fromjson( "{a:{$in:[0,1]},b:{$in:[4,5]}}" ); }
+            BSONObj index() { return BSON( "a" << 1 << "b" << 1 ); }
+            void check() {
+                assertAdvanceToNext( BSON( "a" << 0 << "b" << 5 ) );
+                assertAdvanceTo( BSON( "a" << 0.5 << "b" << 6 ), BSON( "a" << 1 << "b" << 4 ) );
+                assertAdvanceToNext( BSON( "a" << 1 << "b" << 4 ) );
+            }            
+        };
+
+        class AdvanceToNextIntervalIntermediateInMixed : public Base {
+            BSONObj query() { return fromjson( "{a:{$in:[0,1]},b:{$in:[/^a/,'c'],$ne:'a'}}" ); }
+            BSONObj index() { return BSON( "a" << 1 << "b" << 1 ); }
+            void check() {
+                assertAdvanceTo( BSON( "a" << 0 << "b" << "bb" ), BSON( "a" << 0 << "b" << "c" ),
+                                BSON( "a" << 0 << "b" << true ) );
+                assertAdvanceTo( BSON( "a" << 0.5 << "b" << "a" ), BSON( "a" << 1 << "b" << "a" ),
+                                BSON( "a" << true << "b" << false ) );
+            }            
+        };
+
+        class BeforeLowerBound : public Base {
+            BSONObj query() { return fromjson( "{a:{$in:[0,1]},b:{$in:[4,5]}}" ); }
+            BSONObj index() { return BSON( "a" << 1 << "b" << 1 ); }
+            void check() {
+                assertAdvanceTo( BSON( "a" << 0 << "b" << 1 ), BSON( "a" << 0 << "b" << 4 ) );
+                assertAdvanceToNext( BSON( "a" << 0 << "b" << 4 ) );
+            }            
+        };
+
+        class BeforeLowerBoundMixed : public Base {
+            BSONObj query() { return fromjson( "{a:{$in:[0,1]},b:{$in:[/^a/,'c'],$ne:'a'}}" ); }
+            BSONObj index() { return BSON( "a" << 1 << "b" << 1 ); }
+            void check() {
+                assertAdvanceTo( BSON( "a" << 0 << "b" << "" ), BSON( "a" << 0 << "b" << "a" ),
+                                BSON( "a" << 0 << "b" << false ) );
+                assertAdvanceTo( BSON( "a" << 1 << "b" << "bb" ), BSON( "a" << 1 << "b" << "c" ),
+                                BSON( "a" << 0 << "b" << true ) );
+            }            
+        };
+        
+        class AdvanceToNextExclusiveIntervalCompound : public Base {
+            BSONObj query() { return fromjson( "{a:{$in:['x',/^y/],$ne:'y'},b:{$in:[0,1]}}" ); }
+            BSONObj index() { return fromjson( "{a:1,b:1}" ); }
+            void check() {
+                assertAdvanceToNext( BSON( "a" << "x" << "b" << 1 ) );
+                assertAdvanceToAfter( BSON( "a" << "y" << "b" << 0 ), BSON( "a" << "y" ) );
+                assertAdvanceToNext( BSON( "a" << "yy" << "b" << 0 ) );
+            }
+        };
+        
+        class AdvanceRange : public Base {
+            BSONObj query() { return fromjson( "{a:{$gt:2,$lt:8}}" ); }
+            BSONObj index() { return fromjson( "{a:1}" ); }
+            void check() {
+                assertAdvanceToNext( BSON( "a" << 2 ) );
+                assertAdvanceToNext( BSON( "a" << 4 ) );
+                assertAdvanceToNext( BSON( "a" << 5 ) );
+                assertDoneAdvancing( BSON( "a" << 9 ) );
+            }
+        };
+        
+        class AdvanceInRange : public Base {
+            BSONObj query() { return fromjson( "{a:{$in:[0,1]},b:{$gt:2,$lt:8}}" ); }
+            BSONObj index() { return fromjson( "{a:1,b:1}" ); }
+            void check() {
+                assertAdvanceToNext( BSON( "a" << 0 << "b" << 5 ) );
+                assertAdvanceToNext( BSON( "a" << 0 << "b" << 5 ) );
+            }
+        };
+        
+        class AdvanceRangeIn : public Base {
+            BSONObj query() { return fromjson( "{a:{$gt:2,$lt:8},b:{$in:[0,1]}}" ); }
+            BSONObj index() { return fromjson( "{a:1,b:1}" ); }
+            void check() {
+                assertAdvanceToNext( BSON( "a" << 4 << "b" << 1 ) );
+                assertAdvanceToNext( BSON( "a" << 5 << "b" << 0 ) );
+            }
+        };
+
+        class AdvanceRangeRange : public Base {
+            BSONObj query() { return fromjson( "{a:{$gt:2,$lt:8},b:{$gt:1,$lt:4}}" ); }
+            BSONObj index() { return fromjson( "{a:1,b:1}" ); }
+            void check() {
+                assertAdvanceTo( BSON( "a" << 4 << "b" << 0 ), BSON( "a" << 4 << "b" << 1 ) );
+                assertAdvanceToAfter( BSON( "a" << 4 << "b" << 6 ), BSON( "a" << 4 ) );
+            }
+        };
+
+        class AdvanceRangeRangeMultiple : public Base {
+            BSONObj query() { return fromjson( "{a:{$gt:2,$lt:8},b:{$gt:1,$lt:4}}" ); }
+            BSONObj index() { return fromjson( "{a:1,b:1}" ); }
+            void check() {
+                assertAdvanceToNext( BSON( "a" << 4 << "b" << 3 ) );
+                assertAdvanceToNext( BSON( "a" << 4 << "b" << 3 ) );
+            }
+        };
+
+        class AdvanceRangeRangeIn : public Base {
+            BSONObj query() { return fromjson( "{a:{$gt:2,$lt:8},b:{$gt:1,$lt:4},c:{$in:[6,7]}}" ); }
+            BSONObj index() { return fromjson( "{a:1,b:1,c:1}" ); }
+            void check() {
+                assertAdvanceToNext( BSON( "a" << 4 << "b" << 3 << "c" << 7 ) );
+                assertAdvanceToAfter( BSON( "a" << 4 << "b" << 6 << "c" << 7 ), BSON( "a" << 4 ) );
+                assertAdvanceToNext( BSON( "a" << 5 << "b" << 3 << "c" << 6 ) );
+            }
+        };
+        
+        class AdvanceRangeMixed : public Base {
+            BSONObj query() {
+                return fromjson( "{a:{$gt:2,$lt:8},b:{$in:['a',/^b/],$ne:'b'}}" );
+            }
+            BSONObj index() { return fromjson( "{a:1,b:1}" ); }
+            void check() {
+                assertAdvanceToNext( BSON( "a" << 4 << "b" << "a" ) );
+                assertAdvanceToAfter( fromjson( "{a:4,b:'b'}" ), BSON( "a" << 4 << "b" << "b" ) );
+            }            
+        };
+
+        class AdvanceRangeMixed2 : public Base {
+            BSONObj query() {
+                return fromjson( "{a:{$gt:2,$lt:8},b:{$in:['a',/^b/],$ne:'b'}}" );
+            }
+            BSONObj index() { return fromjson( "{a:1,b:1}" ); }
+            void check() {
+                assertAdvanceToNext( BSON( "a" << 4 << "b" << "a" ) );
+                assertAdvanceTo( BSON( "a" << 4 << "b" << "aa" ), BSON( "a" << 4 << "b" << "b" ),
+                                BSON( "a" << 0 << "b" << false ) );
+            }            
+        };
+
+        class AdvanceRangeMixedIn : public Base {
+            BSONObj query() {
+                return fromjson( "{a:{$gt:2,$lt:8},b:{$in:[/^a/,'c']},c:{$in:[6,7]}}" );
+            }
+            BSONObj index() { return fromjson( "{a:1,b:1,c:1}" ); }
+            void check() {
+                assertAdvanceToNext( BSON( "a" << 4 << "b" << "aa" << "c" << 7 ) );
+                assertAdvanceToAfter( fromjson( "{a:4,b:/^q/,c:7}" ), BSON( "a" << 4 ) );
+                assertAdvanceToNext( BSON( "a" << 5 << "b" << "c" << "c" << 6 ) );
+            }
+        };
+
+        class AdvanceRangeMixedMixed : public Base {
+            BSONObj query() {
+                return fromjson( "{a:{$gt:2,$lt:8},b:{$in:['a',/^b/],$ne:'b'},"
+                                "c:{$in:[/^a/,'c'],$ne:'a'}}" );
+            }
+            BSONObj index() { return fromjson( "{a:1,b:1,c:1}" ); }
+            void check() {
+                assertAdvanceTo( BSON( "a" << 4 << "b" << "a" << "c" << "bb" ),
+                                BSON( "a" << 4 << "b" << "a" << "c" << "c" ) );
+                assertAdvanceTo( BSON( "a" << 4 << "b" << "aa" << "c" << "b" ),
+                                BSON( "a" << 4 << "b" << "b" << "c" << "a" ),
+                                BSON( "a" << 0 << "b" << false << "c" << false ) );
+            }
+        };
+        
+        class AdvanceMixedMixedIn : public Base {
+            BSONObj query() {
+                return fromjson( "{a:{$in:[/^a/,'c']},b:{$in:[/^a/,'c']},c:{$in:[6,7]}}" );
+            }
+            BSONObj index() { return fromjson( "{a:1,b:1,c:1}" ); }
+            void check() {
+                assertAdvanceToNext( BSON( "a" << "a" << "b" << "aa" << "c" << 7 ) );
+                assertAdvanceToAfter( fromjson( "{a:'a',b:/^q/,c:7}" ), BSON( "a" << "a" ) );
+                assertAdvanceToNext( BSON( "a" << "c" << "b" << "c" << "c" << 6 ) );
+            }
+        };
+
+        namespace CompoundRangeCounter {
+
+            class RangeTracking {
+            public:
+                RangeTracking() : _counter( 2, 0 ) {}
+                void run() {
+                    ASSERT_EQUALS( 2, _counter.size() );
+                    checkValues( -1, -1 );
+
+                    _counter.setZeroes( 0 );
+                    checkValues( 0, 0 );
+
+                    _counter.setUnknowns( 1 );
+                    checkValues( 0, -1 );
+
+                    _counter.setZeroes( 1 );
+                    checkValues( 0, 0 );
+
+                    _counter.setUnknowns( 0 );
+                    checkValues( -1, -1 );
+
+                    _counter.set( 0, 3 );
+                    checkValues( 3, -1 );
+
+                    _counter.inc( 0 );
+                    checkValues( 4, -1 );
+
+                    _counter.set( 1, 5 );
+                    checkValues( 4, 5 );
+
+                    _counter.inc( 1 );
+                    checkValues( 4, 6 );
+                }
+            private:
+                void checkValues( int first, int second ) {
+                    ASSERT_EQUALS( first, _counter.get( 0 ) );
+                    ASSERT_EQUALS( second, _counter.get( 1 ) );                
+                }
+                FieldRangeVectorIterator::CompoundRangeCounter _counter;
+            };
+            
+            class SingleIntervalCount {
+            public:
+                SingleIntervalCount() : _counter( 2, 2 ) {}
+                void run() {
+                    assertLimitNotReached();
+
+                    _counter.incSingleIntervalCount();
+                    assertLimitNotReached();
+
+                    _counter.incSingleIntervalCount();
+                    assertLimitReached();
+
+                    _counter.set( 1, 1 );
+                    assertLimitNotReached();
+                }
+            private:
+                void assertLimitReached() const {
+                    ASSERT( _counter.hasSingleIntervalCountReachedLimit() );
+                }
+                void assertLimitNotReached() const {
+                    ASSERT( !_counter.hasSingleIntervalCountReachedLimit() );
+                }
+                FieldRangeVectorIterator::CompoundRangeCounter _counter;
+            };
+
+            class SingleIntervalCountUpdateBase {
+            public:
+                SingleIntervalCountUpdateBase() : _counter( 2, 1 ) {}
+                virtual ~SingleIntervalCountUpdateBase() {}
+                void run() {
+                    _counter.incSingleIntervalCount();
+                    ASSERT( _counter.hasSingleIntervalCountReachedLimit() );
+                    applyUpdate();
+                    ASSERT( !_counter.hasSingleIntervalCountReachedLimit() );                    
+                }
+            protected:
+                virtual void applyUpdate() = 0;
+                FieldRangeVectorIterator::CompoundRangeCounter &counter() { return _counter; }
+            private:
+                FieldRangeVectorIterator::CompoundRangeCounter _counter;
+            };
+
+            class Set : public SingleIntervalCountUpdateBase {
+                void applyUpdate() { counter().set( 0, 1 ); }
+            };
+
+            class Inc : public SingleIntervalCountUpdateBase {
+                void applyUpdate() { counter().inc( 1 ); }
+            };
+
+            class SetZeroes : public SingleIntervalCountUpdateBase {
+                void applyUpdate() { counter().setZeroes( 0 ); }
+            };
+
+            class SetUnknowns : public SingleIntervalCountUpdateBase {
+                void applyUpdate() { counter().setUnknowns( 1 ); }
+            };
+
+        } // namespace CompoundRangeCounter
+
+        namespace FieldIntervalMatcher {
+            
+            class IsEqInclusiveUpperBound {
+            public:
+                void run() {
+                    BSONObj exclusiveInterval = BSON( "$lt" << 5 );
+                    for ( int i = 4; i <= 6; ++i ) {
+                        for ( int reverse = 0; reverse < 2; ++reverse ) {
+                            ASSERT( !isEqInclusiveUpperBound( exclusiveInterval, BSON( "" << i ),
+                                                             reverse ) );
+                        }
+                    }
+                    BSONObj inclusiveInterval = BSON( "$lte" << 4 );
+                    for ( int i = 3; i <= 5; i += 2 ) {
+                        for ( int reverse = 0; reverse < 2; ++reverse ) {
+                            ASSERT( !isEqInclusiveUpperBound( inclusiveInterval, BSON( "" << i ),
+                                                             reverse ) );
+                        }
+                    }
+                    ASSERT( isEqInclusiveUpperBound( inclusiveInterval, BSON( "" << 4 ), true ) );
+                    ASSERT( isEqInclusiveUpperBound( inclusiveInterval, BSON( "" << 4 ), false ) );
+                }
+            private:
+                bool isEqInclusiveUpperBound( const BSONObj &intervalSpec,
+                                             const BSONObj &elementSpec,
+                                             bool reverse ) {
+                    FieldRange range( intervalSpec.firstElement(), true );
+                    BSONElement element = elementSpec.firstElement();
+                    FieldRangeVectorIterator::FieldIntervalMatcher matcher
+                            ( range.intervals()[ 0 ], element, reverse );
+                    return matcher.isEqInclusiveUpperBound();
+                }
+            };
+            
+            class IsGteUpperBound {
+            public:
+                void run() {
+                    BSONObj exclusiveInterval = BSON( "$lt" << 5 );
+                    ASSERT( !isGteUpperBound( exclusiveInterval, BSON( "" << 4 ), false ) );
+                    ASSERT( isGteUpperBound( exclusiveInterval, BSON( "" << 5 ), false ) );
+                    ASSERT( isGteUpperBound( exclusiveInterval, BSON( "" << 6 ), false ) );
+                    ASSERT( isGteUpperBound( exclusiveInterval, BSON( "" << 4 ), true ) );
+                    ASSERT( isGteUpperBound( exclusiveInterval, BSON( "" << 5 ), true ) );
+                    ASSERT( !isGteUpperBound( exclusiveInterval, BSON( "" << 6 ), true ) );
+                    BSONObj inclusiveInterval = BSON( "$lte" << 4 );
+                    ASSERT( !isGteUpperBound( inclusiveInterval, BSON( "" << 3 ), false ) );
+                    ASSERT( isGteUpperBound( inclusiveInterval, BSON( "" << 4 ), false ) );
+                    ASSERT( isGteUpperBound( inclusiveInterval, BSON( "" << 5 ), false ) );
+                    ASSERT( isGteUpperBound( inclusiveInterval, BSON( "" << 3 ), true ) );
+                    ASSERT( isGteUpperBound( inclusiveInterval, BSON( "" << 4 ), true ) );
+                    ASSERT( !isGteUpperBound( inclusiveInterval, BSON( "" << 5 ), true ) );
+                }
+            private:
+                bool isGteUpperBound( const BSONObj &intervalSpec, const BSONObj &elementSpec,
+                                     bool reverse ) {
+                    FieldRange range( intervalSpec.firstElement(), true );
+                    BSONElement element = elementSpec.firstElement();
+                    FieldRangeVectorIterator::FieldIntervalMatcher matcher
+                            ( range.intervals()[ 0 ], element, reverse );
+                    return matcher.isGteUpperBound();
+                }
+            };
+
+            class IsEqExclusiveLowerBound {
+            public:
+                void run() {
+                    BSONObj exclusiveInterval = BSON( "$gt" << 5 );
+                    for ( int i = 4; i <= 6; i += 2 ) {
+                        for ( int reverse = 0; reverse < 2; ++reverse ) {
+                            ASSERT( !isEqExclusiveLowerBound( exclusiveInterval, BSON( "" << i ),
+                                                             reverse ) );
+                        }
+                    }
+                    ASSERT( isEqExclusiveLowerBound( exclusiveInterval, BSON( "" << 5 ), true ) );
+                    ASSERT( isEqExclusiveLowerBound( exclusiveInterval, BSON( "" << 5 ), false ) );
+                    BSONObj inclusiveInterval = BSON( "$gte" << 4 );
+                    for ( int i = 3; i <= 5; ++i ) {
+                        for ( int reverse = 0; reverse < 2; ++reverse ) {
+                            ASSERT( !isEqExclusiveLowerBound( inclusiveInterval, BSON( "" << i ),
+                                                             reverse ) );
+                        }
+                    }
+                }
+            private:
+                bool isEqExclusiveLowerBound( const BSONObj &intervalSpec,
+                                             const BSONObj &elementSpec,
+                                             bool reverse ) {
+                    FieldRange range( intervalSpec.firstElement(), true );
+                    BSONElement element = elementSpec.firstElement();
+                    FieldRangeVectorIterator::FieldIntervalMatcher matcher
+                            ( range.intervals()[ 0 ], element, reverse );
+                    return matcher.isEqExclusiveLowerBound();
+                }
+            };
+
+            class IsLtLowerBound {
+            public:
+                void run() {
+                    BSONObj exclusiveInterval = BSON( "$gt" << 5 );
+                    ASSERT( isLtLowerBound( exclusiveInterval, BSON( "" << 4 ), false ) );
+                    ASSERT( !isLtLowerBound( exclusiveInterval, BSON( "" << 5 ), false ) );
+                    ASSERT( !isLtLowerBound( exclusiveInterval, BSON( "" << 6 ), false ) );
+                    ASSERT( !isLtLowerBound( exclusiveInterval, BSON( "" << 4 ), true ) );
+                    ASSERT( !isLtLowerBound( exclusiveInterval, BSON( "" << 5 ), true ) );
+                    ASSERT( isLtLowerBound( exclusiveInterval, BSON( "" << 6 ), true ) );
+                    BSONObj inclusiveInterval = BSON( "$gte" << 4 );
+                    ASSERT( isLtLowerBound( inclusiveInterval, BSON( "" << 3 ), false ) );
+                    ASSERT( !isLtLowerBound( inclusiveInterval, BSON( "" << 4 ), false ) );
+                    ASSERT( !isLtLowerBound( inclusiveInterval, BSON( "" << 5 ), false ) );
+                    ASSERT( !isLtLowerBound( inclusiveInterval, BSON( "" << 3 ), true ) );
+                    ASSERT( !isLtLowerBound( inclusiveInterval, BSON( "" << 4 ), true ) );
+                    ASSERT( isLtLowerBound( inclusiveInterval, BSON( "" << 5 ), true ) );
+                }
+            private:
+                bool isLtLowerBound( const BSONObj &intervalSpec, const BSONObj &elementSpec,
+                                     bool reverse ) {
+                    FieldRange range( intervalSpec.firstElement(), true );
+                    BSONElement element = elementSpec.firstElement();
+                    FieldRangeVectorIterator::FieldIntervalMatcher matcher
+                            ( range.intervals()[ 0 ], element, reverse );
+                    return matcher.isLtLowerBound();
+                }
+            };
+
+            class CheckLowerAfterUpper {
+            public:
+                void run() {
+                    BSONObj intervalSpec = BSON( "$in" << BSON_ARRAY( 1 << 2 ) );
+                    BSONObj elementSpec = BSON( "" << 1 );
+                    FieldRange range( intervalSpec.firstElement(), true );
+                    BSONElement element = elementSpec.firstElement();
+                    FieldRangeVectorIterator::FieldIntervalMatcher matcher
+                            ( range.intervals()[ 0 ], element, false );
+                    ASSERT( matcher.isEqInclusiveUpperBound() );
+                    ASSERT( matcher.isGteUpperBound() );
+                    ASSERT( !matcher.isEqExclusiveLowerBound() );
+                    ASSERT( !matcher.isLtLowerBound() );
+                }
+            };
+
+        } // namespace FieldIntervalMatcher
         
         namespace SingleIntervalLimit {
 
@@ -1380,6 +1871,19 @@ namespace QueryUtilTests {
             add< FieldRangeTests::Diff64 >();
             add< FieldRangeTests::DiffMulti1 >();
             add< FieldRangeTests::DiffMulti2 >();
+            add<FieldRangeTests::Universal>();
+            add<FieldRangeTests::SimpleFiniteSet::EqualArray>();
+            add<FieldRangeTests::SimpleFiniteSet::EqualEmptyArray>();
+            add<FieldRangeTests::SimpleFiniteSet::InArray>();
+            add<FieldRangeTests::SimpleFiniteSet::InRegex>();
+            add<FieldRangeTests::SimpleFiniteSet::Exists>();
+            add<FieldRangeTests::SimpleFiniteSet::UntypedRegex>();
+            add<FieldRangeTests::SimpleFiniteSet::NotIn>();
+            add<FieldRangeTests::SimpleFiniteSet::NotNe>();
+            add<FieldRangeTests::SimpleFiniteSet::MultikeyIntersection>();
+            add<FieldRangeTests::SimpleFiniteSet::Intersection>();
+            add<FieldRangeTests::SimpleFiniteSet::Union>();
+            add<FieldRangeTests::SimpleFiniteSet::Difference>();
             add< FieldRangeSetTests::Intersect >();
             add< FieldRangeSetTests::MultiKeyIntersect >();
             add< FieldRangeSetTests::MultiKeyDiff >();
@@ -1400,6 +1904,37 @@ namespace QueryUtilTests {
             add< FieldRangeSetPairTests::NoNontrivialRanges >();
             add< FieldRangeSetPairTests::MatchPossible >();
             add< FieldRangeSetPairTests::MatchPossibleForIndex >();
+            add<FieldRangeVectorIteratorTests::AdvanceToNextIntervalEquality>();
+            add<FieldRangeVectorIteratorTests::AdvanceToNextIntervalExclusiveInequality>();
+            add<FieldRangeVectorIteratorTests::AdvanceToNextIntervalEqualityReverse>();
+            add<FieldRangeVectorIteratorTests::AdvanceToNextIntervalEqualityCompound>();
+            add<FieldRangeVectorIteratorTests::AdvanceToNextIntervalIntermediateEqualityCompound>();
+            add<FieldRangeVectorIteratorTests::AdvanceToNextIntervalIntermediateInMixed>();
+            add<FieldRangeVectorIteratorTests::BeforeLowerBound>();
+            add<FieldRangeVectorIteratorTests::BeforeLowerBoundMixed>();
+            add<FieldRangeVectorIteratorTests::AdvanceToNextExclusiveIntervalCompound>();
+            add<FieldRangeVectorIteratorTests::AdvanceRange>();
+            add<FieldRangeVectorIteratorTests::AdvanceInRange>();
+            add<FieldRangeVectorIteratorTests::AdvanceRangeIn>();
+            add<FieldRangeVectorIteratorTests::AdvanceRangeRange>();
+            add<FieldRangeVectorIteratorTests::AdvanceRangeRangeMultiple>();
+            add<FieldRangeVectorIteratorTests::AdvanceRangeRangeIn>();
+            add<FieldRangeVectorIteratorTests::AdvanceRangeMixed>();
+            add<FieldRangeVectorIteratorTests::AdvanceRangeMixed2>();
+            add<FieldRangeVectorIteratorTests::AdvanceRangeMixedIn>();
+            add<FieldRangeVectorIteratorTests::AdvanceRangeMixedMixed>();
+            add<FieldRangeVectorIteratorTests::AdvanceMixedMixedIn>();
+            add<FieldRangeVectorIteratorTests::CompoundRangeCounter::RangeTracking>();
+            add<FieldRangeVectorIteratorTests::CompoundRangeCounter::SingleIntervalCount>();
+            add<FieldRangeVectorIteratorTests::CompoundRangeCounter::Set>();
+            add<FieldRangeVectorIteratorTests::CompoundRangeCounter::Inc>();
+            add<FieldRangeVectorIteratorTests::CompoundRangeCounter::SetZeroes>();
+            add<FieldRangeVectorIteratorTests::CompoundRangeCounter::SetUnknowns>();
+            add<FieldRangeVectorIteratorTests::FieldIntervalMatcher::IsEqInclusiveUpperBound>();
+            add<FieldRangeVectorIteratorTests::FieldIntervalMatcher::IsGteUpperBound>();
+            add<FieldRangeVectorIteratorTests::FieldIntervalMatcher::IsEqExclusiveLowerBound>();
+            add<FieldRangeVectorIteratorTests::FieldIntervalMatcher::IsLtLowerBound>();
+            add<FieldRangeVectorIteratorTests::FieldIntervalMatcher::CheckLowerAfterUpper>();
             add<FieldRangeVectorIteratorTests::SingleIntervalLimit::NoLimit>();
             add<FieldRangeVectorIteratorTests::SingleIntervalLimit::OneIntervalLimit>();
             add<FieldRangeVectorIteratorTests::SingleIntervalLimit::TwoIntervalLimit>();

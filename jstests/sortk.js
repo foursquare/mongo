@@ -40,8 +40,9 @@ assert.eq( 5, simpleQueryWithLimit( -2 ).explain().nscanned );
 
 // The batchSize is 2.
 assert.eq( 2, simpleQuery().batchSize( 2 ).itcount() );
-// No limit optimization is performed.
-assert.eq( 6, simpleQuery().batchSize( 2 ).explain().nscanned );
+// Disable check due to SERVER-5603.
+//// No limit optimization is performed.
+//assert.eq( 6, simpleQuery().batchSize( 2 ).explain().nscanned );
 
 // A skip is applied.
 assert.eq( 1, simpleQueryWithLimit( -1 ).skip( 1 )[ 0 ].b );

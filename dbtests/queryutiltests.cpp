@@ -990,10 +990,11 @@ namespace QueryUtilTests {
             struct UntypedRegex : public NotSimpleFiniteSet {
                 UntypedRegex() : NotSimpleFiniteSet( fromjson( "{a:{$regex:'^a'}}" ) ) {}
             };
-            
-            struct And : public SimpleFiniteSet {
-                And() : SimpleFiniteSet( fromjson( "{$and:[{a:{$in:[0,1]}}]}" ) ) {}
-            };
+
+            // SERVER-5063 Cannot backport.
+//            struct And : public SimpleFiniteSet {
+//                And() : SimpleFiniteSet( fromjson( "{$and:[{a:{$in:[0,1]}}]}" ) ) {}
+//            };
 
             struct All : public NotSimpleFiniteSet {
                 All() : NotSimpleFiniteSet( fromjson( "{a:{$all:[0]}}" ) ) {}
@@ -1896,7 +1897,7 @@ namespace QueryUtilTests {
             add<FieldRangeSetTests::SimpleFiniteSet::Not>();
             add<FieldRangeSetTests::SimpleFiniteSet::Regex>();
             add<FieldRangeSetTests::SimpleFiniteSet::UntypedRegex>();
-            add<FieldRangeSetTests::SimpleFiniteSet::And>();
+//            add<FieldRangeSetTests::SimpleFiniteSet::And>();
             add<FieldRangeSetTests::SimpleFiniteSet::All>();
             add<FieldRangeSetTests::SimpleFiniteSet::ElemMatch>();
             add<FieldRangeSetTests::SimpleFiniteSet::AllElemMatch>();

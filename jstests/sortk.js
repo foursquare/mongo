@@ -145,13 +145,15 @@ function andEqInQueryWithLimit( limit ) {
 // The limit is -1.
 assert.eq( 0, eqInQueryWithLimit( -1 )[ 0 ].c );
 assert.eq( 3, eqInQueryWithLimit( -1 ).explain().nscanned );
-assert.eq( 0, andEqInQueryWithLimit( -1 )[ 0 ].c );
-assert.eq( 3, andEqInQueryWithLimit( -1 ).explain().nscanned );
+// SERVER-5063 cannot backport.
+//assert.eq( 0, andEqInQueryWithLimit( -1 )[ 0 ].c );
+//assert.eq( 3, andEqInQueryWithLimit( -1 ).explain().nscanned );
 
 // The limit is -2.
 assert.eq( 0, eqInQueryWithLimit( -2 )[ 0 ].c );
 assert.eq( 1, eqInQueryWithLimit( -2 )[ 1 ].c );
 assert.eq( 5, eqInQueryWithLimit( -2 ).explain().nscanned );
-assert.eq( 0, andEqInQueryWithLimit( -2 )[ 0 ].c );
-assert.eq( 1, andEqInQueryWithLimit( -2 )[ 1 ].c );
-assert.eq( 5, andEqInQueryWithLimit( -2 ).explain().nscanned );
+// SERVER-5063 Cannot backport.
+//assert.eq( 0, andEqInQueryWithLimit( -2 )[ 0 ].c );
+//assert.eq( 1, andEqInQueryWithLimit( -2 )[ 1 ].c );
+//assert.eq( 5, andEqInQueryWithLimit( -2 ).explain().nscanned );

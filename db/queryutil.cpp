@@ -863,7 +863,6 @@ namespace mongo {
                         processQueryField( j.next(), optimize );
                     }
                 }
-                return;
             }
             
             adjustMatchField();

@@ -623,6 +623,40 @@ namespace mongo {
                 // no-op b/c unset/pull of nothing does nothing
                 break;
 
+	    // NOTE(nfolkert): this could be simplified if we a) always set the field to zero even if unmodified, and b) always use long
+            case Mod::BIT: {
+	      // depends on bit type                                                                                 
+	      BSONObjIterator i2( m.elt.embeddedObject() );
+	      bool useLong = false;
+	      int x = 0;
+	      long long y = 0;
+
+	      while ( i2.more() ) {
+		BSONElement e = i2.next();
+
+		uassert( 16185 ,  "$bit field must be number" , e.isNumber() );
+		if ( str::equals(e.fieldName(), "and") ) {
+		  if (e.type() == NumberLong) useLong = true;
+		  x = x & e.numberInt();
+		  y = y & e.numberLong();
+		}
+		else if ( str::equals(e.fieldName(), "or") ) {
+		  if (e.type() == NumberLong) useLong = true;
+		  x = x | e.numberInt();
+		  y = y | e.numberLong();
+		}
+		else {
+		  uasserted(16186, str::stream() << "unknown $bit operation: " << e.fieldName());
+		}
+	      }
+	      // Append the smallest value we can, and ignore if zero                                                
+	      if (useLong && y != 0L)
+		b.append(m.shortFieldName, y);
+	      else if (x != 0)
+		b.append(m.shortFieldName, x);
+	      break;
+            }
+
             case Mod::INC:
                 ms.fixedOpName = "$set";
             case Mod::SET: {

@@ -170,10 +170,16 @@ namespace mongo {
         return 0;
     }
 
-    void printShardingVersionInfo() {
-        log() << mongosCommand << " " << mongodVersion() << " starting (--help for usage)" << endl;
-        printGitVersion();
-        printSysInfo();
+    void printShardingVersionInfo(bool out) {
+        if (out) {
+          cout << mongosCommand << " " << mongodVersion() << " starting (--help for usage)" << endl;
+          cout << "git version: " << gitVersion() << endl;
+          cout <<  "build sys info: " << sysInfo() << endl;
+        } else {
+          log() << mongosCommand << " " << mongodVersion() << " starting (--help for usage)" << endl;
+          printGitVersion();
+          printSysInfo();
+        }
     }
 
 } // namespace mongo
@@ -221,7 +227,7 @@ int _main(int argc, char* argv[]) {
     }
 
     if ( params.count( "version" ) ) {
-        printShardingVersionInfo();
+        printShardingVersionInfo(true);
         return 0;
     }
 
@@ -307,7 +313,7 @@ int _main(int argc, char* argv[]) {
         return 1;
     }
 
-    printShardingVersionInfo();
+    printShardingVersionInfo(false);
 
     if ( ! configServer.init( configdbs ) ) {
         cout << "couldn't resolve config db address" << endl;

@@ -24,6 +24,7 @@
 #include "matcher.h"
 #include "../util/net/listen.h"
 #include <queue>
+#include "ops/query.h"
 
 namespace mongo {
 
@@ -44,6 +45,8 @@ namespace mongo {
                   const FieldRangeSetPair *originalFrsp,
                   const BSONObj &originalQuery,
                   const BSONObj &order,
+                  const shared_ptr<const ParsedQuery> &parsedQuery =
+                          shared_ptr<const ParsedQuery>(),
                   bool mustAssertOnYieldFailure = true,
                   const BSONObj &startKey = BSONObj(),
                   const BSONObj &endKey = BSONObj(),
@@ -89,14 +92,17 @@ namespace mongo {
         
         shared_ptr<FieldRangeVector> frv() const { return _frv; }
         bool isMultiKey() const;
+        bool queryFiniteSetOrderSuffix() const;
 
     private:
+        int independentRangesSingleIntervalLimit() const;
         NamespaceDetails * _d;
         int _idxNo;
         const FieldRangeSet &_frs;
         const FieldRangeSet &_frsMulti;
         const BSONObj &_originalQuery;
         const BSONObj &_order;
+        shared_ptr<const ParsedQuery> _parsedQuery;
         const IndexDetails * _index;
         bool _optimal;
         bool _scanAndOrderRequired;
@@ -260,6 +266,8 @@ namespace mongo {
                       auto_ptr<FieldRangeSetPair> originalFrsp,
                       const BSONObj &originalQuery,
                       const BSONObj &order,
+                      const shared_ptr<const ParsedQuery> &parsedQuery =
+                              shared_ptr<const ParsedQuery>(),
                       bool mustAssertOnYieldFailure = true,
                       const BSONElement *hint = 0,
                       bool honorRecordedPlan = true,
@@ -369,6 +377,7 @@ namespace mongo {
         bool _usingPrerecordedPlan;
         BSONObj _hint;
         BSONObj _order;
+        shared_ptr<const ParsedQuery> _parsedQuery;
         long long _oldNScanned;
         bool _honorRecordedPlan;
         BSONObj _min;
@@ -387,6 +396,8 @@ namespace mongo {
         MultiPlanScanner( const char *ns,
                           const BSONObj &query,
                           const BSONObj &order,
+                          const shared_ptr<const ParsedQuery> &parsedQuery =
+                                  shared_ptr<const ParsedQuery>(),
                           const BSONElement *hint = 0,
                           bool honorRecordedPlan = true,
                           const BSONObj &min = BSONObj(),
@@ -458,6 +469,7 @@ namespace mongo {
         const char * _ns;
         bool _or;
         BSONObj _query;
+        shared_ptr<const ParsedQuery> _parsedQuery;
         shared_ptr<OrRangeGenerator> _org; // May be null in certain non $or query cases.
         auto_ptr<QueryPlanSet> _currentQps;
         int _i;

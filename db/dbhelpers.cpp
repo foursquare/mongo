@@ -105,7 +105,7 @@ namespace mongo {
        set your db SavedContext first
     */
     bool Helpers::findOne(const char *ns, const BSONObj &query, BSONObj& result, bool requireIndex) {
-        MultiPlanScanner s( ns, query, BSONObj(), 0, !requireIndex );
+        MultiPlanScanner s( ns, query, BSONObj(), shared_ptr<ParsedQuery>(), 0, !requireIndex );
         FindOne original( requireIndex );
         shared_ptr< FindOne > res = s.runOp( original );
         if ( ! res->complete() )
@@ -120,7 +120,7 @@ namespace mongo {
        set your db SavedContext first
     */
     DiskLoc Helpers::findOne(const char *ns, const BSONObj &query, bool requireIndex) {
-        MultiPlanScanner s( ns, query, BSONObj(), 0, !requireIndex );
+        MultiPlanScanner s( ns, query, BSONObj(), shared_ptr<ParsedQuery>(), 0, !requireIndex );
         FindOne original( requireIndex );
         shared_ptr< FindOne > res = s.runOp( original );
         if ( ! res->complete() )

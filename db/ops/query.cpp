@@ -364,7 +364,7 @@ namespace mongo {
         if ( query.isEmpty() ) {
             return applySkipLimit( d->stats.nrecords , cmd );
         }
-        MultiPlanScanner mps( ns, query, BSONObj(), 0, true, BSONObj(), BSONObj(), false, true );
+        MultiPlanScanner mps( ns, query, BSONObj(), shared_ptr<const ParsedQuery>(), 0, true, BSONObj(), BSONObj(), false, true );
         CountOp original( ns , cmd );
         shared_ptr< CountOp > res = mps.runOp( original );
         if ( !res->complete() ) {
@@ -962,7 +962,7 @@ namespace mongo {
             if ( mps.usingPrerecordedPlan() )
                 oldPlan = mps.oldExplain();
         }
-        auto_ptr< MultiPlanScanner > mps( new MultiPlanScanner( ns, query, order, &hint, !explain, pq.getMin(), pq.getMax(), false, true ) );
+        auto_ptr< MultiPlanScanner > mps( new MultiPlanScanner( ns, query, order, pq_shared, &hint, !explain, pq.getMin(), pq.getMax(), false, true ) );
         BSONObj explainSuffix;
         if ( explain ) {
             BSONObjBuilder bb;

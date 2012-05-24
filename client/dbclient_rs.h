@@ -98,6 +98,21 @@ namespace mongo {
         
         void appendInfo( BSONObjBuilder& b ) const;
 
+        /**
+         * Number of seconds to sleep for a replica status check
+         */
+        static int getSleepSecs();
+
+        static void setSleepSecs( int sleepSecs );
+
+        /**
+         * Number of times a health check can fail until the replica no longer
+         * serves queries
+         */
+        static unsigned int getMaxCheckFailures();
+
+        static void setMaxCheckFailures( unsigned int maxCheckFailures );
+
     private:
         /**
          * This populates a list of hosts from the list of seeds (discarding the
@@ -181,12 +196,18 @@ namespace mongo {
         string _name;
         struct Node {
             Node( const HostAndPort& a , DBClientConnection* c ) 
-                : addr( a ) , conn(c) , ok( c != NULL ),
-                  ismaster(false), secondary( false ) , hidden( false ) , pingTimeMillis(0) {
+                : addr( a ) , conn(c) , ok( c != NULL ) , 
+                  ismaster(false), secondary( false ) , hidden( false ) , pingTimeMillis(0), queueSize(0) ,
+                  healthMsg ( "unknown" ), healthDiskTouchMs ( 0 ), healthKillFile ( false ), healthCheckFailCount ( 0 ) {
+            }
+
+            bool okPingAndQueue() const {
+              return (pingTimeMillis < 100) && (queueSize < 20);
             }
 
             bool okForSecondaryQueries() const {
-                return ok && secondary && ! hidden;
+                return ok && secondary && ! hidden
+                  && (healthCheckFailCount < ReplicaSetMonitor::getMaxCheckFailures());
             }
 
             BSONObj toBSON() const {
@@ -194,7 +215,14 @@ namespace mongo {
                              "isMaster" << ismaster <<
                              "secondary" << secondary <<
                              "hidden" << hidden <<
-                             "ok" << ok );
+                             "pingTimeInMillis" << pingTimeMillis <<
+                             "queueSize" << queueSize <<
+                             "ok" << ok <<
+                             "healthMsg" << healthMsg <<
+                             "healthDiskTouchMs" << healthDiskTouchMs <<
+                             "healthKillFile" << healthKillFile <<
+                             "healthCheckFailCount" << healthCheckFailCount
+                             );
             }
 
             string toString() const {
@@ -217,7 +245,13 @@ namespace mongo {
             bool hidden;
             
             int pingTimeMillis;
+            int queueSize;
 
+            // health status
+            string healthMsg;
+            int healthDiskTouchMs;
+            bool healthKillFile;
+            unsigned int healthCheckFailCount;
         };
 
         /**
@@ -232,6 +266,10 @@ namespace mongo {
         static map<string,ReplicaSetMonitorPtr> _sets; // set name to Monitor
 
         static ConfigChangeHook _hook;
+
+        // health check
+        static int _sleepSecs;
+        unsigned static int _maxCheckFailures;
     };
 
     /** Use this class to connect to a replica set of servers.  The class will manage

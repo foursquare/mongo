@@ -451,6 +451,12 @@ namespace mongo {
         */
         virtual bool isMaster(bool& isMaster, BSONObj *info=0);
 
+        /** pass an info to get command details
+
+          returns true if command invoked successfully.
+        */
+        virtual bool serverStatus(BSONObj *info = 0);
+
         /**
            Create a new collection in the database.  Normally, collection creation is automatic.  You would
            use this function if you wish to specify special options on creation.

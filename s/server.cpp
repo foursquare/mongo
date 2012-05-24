@@ -20,6 +20,7 @@
 #include "../util/net/message.h"
 #include "../util/unittest.h"
 #include "../client/connpool.h"
+#include "../client/dbclient_rs.h"
 #include "../util/net/message_server.h"
 #include "../util/stringutils.h"
 #include "../util/version.h"
@@ -197,6 +198,7 @@ int _main(int argc, char* argv[]) {
     po::options_description options("General options");
     po::options_description sharding_options("Sharding options");
     po::options_description hidden("Hidden options");
+    po::options_description healthcheck_options("Health check options");
     po::positional_options_description positional;
 
     CmdLine::addGlobalOptions( options , hidden );
@@ -215,6 +217,13 @@ int _main(int argc, char* argv[]) {
     ( "noAutoSplit", "do not send split commands with writes" );
 
     options.add(sharding_options);
+
+    healthcheck_options.add_options()
+    ( "checkInterval" , po::value<int>() , "in seconds" )
+    ( "maxCheckFailures" , po::value<int>() , "maximum number of health check failures until replica stops taking queries" )
+    ;
+    options.add(healthcheck_options);
+
     // parse options
     po::variables_map params;
     if ( ! CmdLine::store( argc , argv , options , hidden , positional , params ) )
@@ -296,6 +305,21 @@ int _main(int argc, char* argv[]) {
         }
     }
     
+    // set health check options
+    int interval = 10;
+    if ( params.count ( "checkInterval" ) ) {
+        interval = params["checkInterval"].as<int>();
+    }
+    ReplicaSetMonitor::setSleepSecs(interval);
+    out() << "sleepSecs: " << ReplicaSetMonitor::getSleepSecs() << endl;
+
+    unsigned int maxCheckFailures = 3;
+    if ( params.count ( "maxCheckFailures" ) ) {
+        maxCheckFailures = params["maxCheckFailures"].as<int>();
+    }
+    ReplicaSetMonitor::setMaxCheckFailures(maxCheckFailures);
+    out() << "maxCheckFailures: " << ReplicaSetMonitor::getMaxCheckFailures() << endl;
+
     // set some global state
 
     pool.addHook( new ShardingConnectionHook( false ) );

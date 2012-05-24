@@ -445,11 +445,7 @@ namespace mongo {
         list<HostAndPort> memberHostnames() const;
         const ReplSetConfig::MemberCfg& myConfig() const { return _config; }
         bool iAmArbiterOnly() const { return myConfig().arbiterOnly; }
-        bool iAmPotentiallyHot() const {
-          return myConfig().potentiallyHot() && // not an arbiter
-            elect.steppedDown <= time(0) && // not stepped down/frozen
-            state() == MemberState::RS_SECONDARY; // not stale
-        }
+        bool iAmPotentiallyHot() const;
     protected:
         Member *_self;
         bool _buildIndexes;       // = _self->config().buildIndexes
@@ -510,8 +506,9 @@ namespace mongo {
     public:
         ReplSet(ReplSetCmdline& replSetCmdline) : ReplSetImpl(replSetCmdline) {  }
 
-        // for the replSetStepDown command
+        // for the replSetStepDown command and KillFileWatcher.
         bool stepDown(int secs) { return _stepDown(secs); }
+        bool isSafeToStepDown(string& errmsg, BSONObjBuilder& detailedResponse);
 
         // for the replSetFreeze command
         bool freeze(int secs) { return _freeze(secs); }

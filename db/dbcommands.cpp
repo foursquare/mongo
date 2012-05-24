@@ -48,6 +48,7 @@
 #include "../util/version.h"
 #include "../s/d_writeback.h"
 #include "dur_stats.h"
+#include "modules/killfilewatcher.h"
 
 namespace mongo {
 
@@ -447,6 +448,31 @@ namespace mongo {
             result.append("uptime",(double) (time(0)-started));
             result.append("uptimeEstimate",(double) (start/1000));
             result.appendDate( "localTime" , jsTime() );
+
+            {
+                BSONObjBuilder health;
+
+                string msg = "healthy";
+                bool healthy = true;
+
+                bool killFileExists = killFileWatcher.isKilled();
+                if (killFileExists) {
+                    healthy = false;
+                    string killFileContents = killFileWatcher.contentsOfKillFile();
+                    if (killFileContents.size() == 0) {
+                        msg = "kill file is present, forcing unhealthy status";
+                    } else {
+                        msg = "kill file is present, forcing unhealthy status: " + killFileContents;
+                    }
+                }
+
+                health.append("ok", healthy);
+                health.append("msg", msg);
+                health.append("killFile", killFileExists);
+
+                result.append("healthStatus", health.obj());
+            }
+            timeBuilder.appendNumber( "after health" , Listener::getElapsedTimeMillis() - start );
 
             {
                 BSONObjBuilder t;

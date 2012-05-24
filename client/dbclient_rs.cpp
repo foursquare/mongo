@@ -22,7 +22,6 @@
 #include "../db/json.h"
 #include "../db/dbmessage.h"
 #include "connpool.h"
-#include "dbclient_rs.h"
 #include "../util/background.h"
 
 namespace mongo {
@@ -54,7 +53,7 @@ namespace mongo {
         void run() {
             log() << "starting" << endl;
             while ( ! inShutdown() ) {
-                sleepsecs( 10 );
+                sleepsecs( ReplicaSetMonitor::getSleepSecs() );
                 try {
                     ReplicaSetMonitor::checkAll( true );
                 }
@@ -180,6 +179,22 @@ namespace mongo {
         _hook = hook;
     }
     
+    void ReplicaSetMonitor::setSleepSecs( int sleepSecs ) {
+        _sleepSecs = sleepSecs;
+    }
+
+    int ReplicaSetMonitor::getSleepSecs() {
+        return _sleepSecs;
+    }
+
+    void ReplicaSetMonitor::setMaxCheckFailures( unsigned int maxCheckFailures ) {
+        _maxCheckFailures = maxCheckFailures;
+    }
+
+    unsigned int ReplicaSetMonitor::getMaxCheckFailures() {
+        return _maxCheckFailures;
+    }
+
     string ReplicaSetMonitor::getServerAddress() const {
         scoped_lock lk( _lock );
         return _getServerAddress_inlock();
@@ -277,6 +292,9 @@ namespace mongo {
         for ( unsigned ii = 0; ii < _nodes.size(); ii++ ) {
             _nextSlave = ( _nextSlave + 1 ) % _nodes.size();
             if ( _nextSlave != _master ) {
+                if ( !_nodes[ _nextSlave].okPingAndQueue() ) {
+                  LOG(1) << "dbclient_rs okPingAndQueue false " << _nodes[_nextSlave] << endl;
+                }
                 if ( _nodes[ _nextSlave ].okForSecondaryQueries() )
                     return _nodes[ _nextSlave ].addr;
                 LOG(2) << "dbclient_rs getSlave not selecting " << _nodes[_nextSlave] << ", not currently okForSecondaryQueries" << endl;
@@ -501,18 +519,28 @@ namespace mongo {
         try {
             Timer t;
             BSONObj o;
-            conn->isMaster( isMaster, &o );
+            conn->serverStatus(&o);
 
-            if ( o["setName"].type() != String || o["setName"].String() != _name ) {
-                warning() << "node: " << conn->getServerAddress()
-                          << " isn't a part of set: " << _name
-                          << " ismaster: " << o << endl;
-
+            if ( !(o.hasField("repl") && o["repl"].type() == Object) ) {
+                warning() << "node: " << conn->getServerAddress() 
+                          << " isn't a part of any replica set. serverStatus: " << o << endl;
                 if ( nodesOffset >= 0 ) {
                     scoped_lock lk( _lock );
                     _nodes[nodesOffset].ok = false;
                 }
+                return false;
+            }
 
+            BSONObj repl = o["repl"].embeddedObject();
+
+            if ( repl["setName"].type() != String || repl["setName"].String() != _name ) {
+                warning() << "node: " << conn->getServerAddress() 
+                          << " isn't a part of set: " << _name 
+                          << " ismaster: " << repl << endl;
+                if ( nodesOffset >= 0 ) {
+                    scoped_lock lk( _lock );
+                    _nodes[nodesOffset].ok = false;
+                }
                 return false;
             }
 
@@ -520,31 +548,48 @@ namespace mongo {
                 scoped_lock lk( _lock );
 
                 _nodes[nodesOffset].pingTimeMillis = t.millis();
-                _nodes[nodesOffset].hidden = o["hidden"].trueValue();
-                _nodes[nodesOffset].secondary = o["secondary"].trueValue();
-                _nodes[nodesOffset].ismaster = o["ismaster"].trueValue();
+                _nodes[nodesOffset].hidden = repl["hidden"].trueValue();
+                _nodes[nodesOffset].secondary = repl["secondary"].trueValue();
+                _nodes[nodesOffset].ismaster = repl["ismaster"].trueValue();
+                isMaster = _nodes[nodesOffset].ismaster;
+                if ( o.hasField("globalLock") ){
+                  _nodes[nodesOffset].queueSize = o["globalLock"].embeddedObject()["currentQueue"].embeddedObject()["total"].numberInt();
+                }
 
-                _nodes[nodesOffset].lastIsMaster = o.copy();
+                _nodes[nodesOffset].lastIsMaster = repl.copy();
+                // health status
+                if ( (o.hasField("healthStatus") && o["healthStatus"].type() == Object) ) {
+                    BSONObj healthStatus = o["healthStatus"].embeddedObject();
+                    if ( healthStatus["ok"].trueValue() ) {
+                        _nodes[nodesOffset].healthCheckFailCount = 0;
+                    } else {
+                        _nodes[nodesOffset].healthCheckFailCount += 1;
+                    }
+                    _nodes[nodesOffset].healthMsg = healthStatus["msg"].String();
+                    _nodes[nodesOffset].healthDiskTouchMs = healthStatus["diskTouchMs"].numberInt();
+                    _nodes[nodesOffset].healthKillFile = healthStatus["killFile"].trueValue();
+                }
             }
 
-            log( ! verbose ) << "ReplicaSetMonitor::_checkConnection: " << conn->toString()
-                             << ' ' << o << endl;
+            log( ! verbose ) << "ReplicaSetMonitor::_checkConnection: " << conn->toString() 
+                             << ' ' << repl << endl;
             
             // add other nodes
             BSONArrayBuilder b;
-            if ( o["hosts"].type() == Array ) {
-                if ( o["primary"].type() == String )
-                    maybePrimary = o["primary"].String();
+            if ( repl["hosts"].type() == Array ) {
+                if ( repl["primary"].type() == String )
+                    maybePrimary = repl["primary"].String();
 
-                BSONObjIterator it( o["hosts"].Obj() );
-                while( it.more() ) b.append( it.next() );
-            }
-
-            if (o.hasField("passives") && o["passives"].type() == Array) {
-                BSONObjIterator it( o["passives"].Obj() );
+                BSONObjIterator it( repl["hosts"].Obj() );
                 while( it.more() ) b.append( it.next() );
             }
             
+            if (repl.hasField("passives") && repl["passives"].type() == Array) {
+                BSONObjIterator it( repl["passives"].Obj() );
+                while( it.more() ) b.append( it.next() );
+            }
+            
+
             _checkHosts( b.arr(), changed);
             _checkStatus( conn->getServerAddress() );
 
@@ -720,8 +765,12 @@ namespace mongo {
                                 "ismaster" << _nodes[i].ismaster <<
                                 "hidden" << _nodes[i].hidden <<
                                 "secondary" << _nodes[i].secondary <<
-                                "pingTimeMillis" << _nodes[i].pingTimeMillis  ) );
-            
+                                "pingTimeMillis" << _nodes[i].pingTimeMillis <<
+                                "queueSize" << _nodes[i].queueSize <<
+                                "healthMsg" << _nodes[i].healthMsg <<
+                                "healthDiskTouchMs" << _nodes[i].healthDiskTouchMs <<
+                                "healthKillFile" << _nodes[i].healthKillFile <<
+                                "healthCheckFailCount" << _nodes[i].healthCheckFailCount));
         }
         hosts.done();
         
@@ -740,6 +789,9 @@ namespace mongo {
     mongo::mutex ReplicaSetMonitor::_setsLock( "ReplicaSetMonitor" );
     map<string,ReplicaSetMonitorPtr> ReplicaSetMonitor::_sets;
     ReplicaSetMonitor::ConfigChangeHook ReplicaSetMonitor::_hook;
+    // health check
+    int ReplicaSetMonitor::_sleepSecs;
+    unsigned int ReplicaSetMonitor::_maxCheckFailures;
     // --------------------------------
     // ----- DBClientReplicaSet ---------
     // --------------------------------

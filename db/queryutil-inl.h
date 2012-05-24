@@ -80,6 +80,34 @@ namespace mongo {
         }
         return count;
     }
+    
+    inline
+    FieldRangeVectorIterator::CompoundRangeCounter::CompoundRangeCounter( int size,
+                                                                         int singleIntervalLimit ) :
+    _i( size, -1 ),
+    _singleIntervalCount(),
+    _singleIntervalLimit( singleIntervalLimit ) {
+    }
+    
+    inline void FieldRangeVectorIterator::CompoundRangeCounter::set( int i, int newVal ) {
+        resetIntervalCount();
+        _i[ i ] = newVal;
+    }
+    
+    inline void FieldRangeVectorIterator::CompoundRangeCounter::inc( int i ) {
+        resetIntervalCount();
+        ++_i[ i ];
+    }
+    
+    inline void FieldRangeVectorIterator::CompoundRangeCounter::setZeroes( int i ) {
+        resetIntervalCount();
+        for( int j = i; j < (int)_i.size(); ++j ) _i[ j ] = 0;
+    }
+    
+    inline void FieldRangeVectorIterator::CompoundRangeCounter::setUnknowns( int i ) {
+        resetIntervalCount();
+        for( int j = i; j < (int)_i.size(); ++j ) _i[ j ] = -1;
+    }
 
     inline bool FieldRangeSet::matchPossible() const {
         for( map<string,FieldRange>::const_iterator i = _ranges.begin(); i != _ranges.end(); ++i ) {

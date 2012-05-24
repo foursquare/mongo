@@ -156,12 +156,14 @@ namespace mongo {
     }
 
 
-    FieldRange::FieldRange( const BSONElement &e, bool singleKey, bool isNot, bool optimize )
-    : _singleKey( singleKey ) {
+    FieldRange::FieldRange( const BSONElement &e, bool singleKey, bool isNot, bool optimize ) :
+    _singleKey( singleKey ),
+    _simpleFiniteSet() {
         int op = e.getGtLtOp();
 
         // NOTE with $not, we could potentially form a complementary set of intervals.
         if ( !isNot && !e.eoo() && e.type() != RegEx && op == BSONObj::opIN ) {
+            bool exactMatchesOnly = true;
             set<BSONElement,element_lt> vals;
             vector<FieldRange> regexes;
             uassert( 12580 , "invalid query" , e.isABSONObj() );
@@ -172,6 +174,7 @@ namespace mongo {
                          ie.type() != Object ||
                          ie.embeddedObject().firstElement().getGtLtOp() != BSONObj::opELEM_MATCH );
                 if ( ie.type() == RegEx ) {
+                    exactMatchesOnly = false;
                     regexes.push_back( FieldRange( ie, singleKey, false, optimize ) );
                 }
                 else {
@@ -180,6 +183,7 @@ namespace mongo {
                     // array.
                     vals.insert( ie );                        
                     if ( ie.type() == Array ) {
+                        exactMatchesOnly = false;
                         BSONElement temp = ie.embeddedObject().firstElement();
                         if ( temp.eoo() ) {
                             temp = staticUndefined.firstElement();
@@ -189,6 +193,7 @@ namespace mongo {
                 }
             }
 
+            _simpleFiniteSet = exactMatchesOnly;
             for( set<BSONElement,element_lt>::const_iterator i = vals.begin(); i != vals.end(); ++i )
                 _intervals.push_back( FieldInterval(*i) );
 
@@ -274,6 +279,12 @@ namespace mongo {
             }
             return;
         }
+        
+        if ( op == BSONObj::Equality && !isNot ) {
+            // e.type() != Array here; that case was handled above.
+            _simpleFiniteSet = true;
+        }
+
         if ( isNot ) {
             switch( op ) {
             case BSONObj::Equality:
@@ -433,12 +444,14 @@ namespace mongo {
 
     }
 
-    void FieldRange::finishOperation( const vector<FieldInterval> &newIntervals, const FieldRange &other ) {
+    void FieldRange::finishOperation( const vector<FieldInterval> &newIntervals,
+                                     const FieldRange &other, bool simpleFiniteSet ) {
         _intervals = newIntervals;
         for( vector<BSONObj>::const_iterator i = other._objData.begin(); i != other._objData.end(); ++i )
             _objData.push_back( *i );
         if ( _special.size() == 0 && other._special.size() )
             _special = other._special;
+        _simpleFiniteSet = simpleFiniteSet;
     }
 
     // as called, these functions find the max/min of a bound in the
@@ -469,6 +482,7 @@ namespace mongo {
             if ( other <= *this ) {
              	*this = other;
             }
+            _simpleFiniteSet = false;
             return *this;
         }
         vector<FieldInterval> newIntervals;
@@ -486,7 +500,9 @@ namespace mongo {
                 ++j;
             }
         }
-        finishOperation( newIntervals, other );
+        // Forward simpleFiniteSet() when other is copied to *this.
+        bool simpleFiniteSet = universal() && other.simpleFiniteSet();
+        finishOperation( newIntervals, other, simpleFiniteSet );
         return *this;
     }
 
@@ -538,7 +554,7 @@ namespace mongo {
         tmp._lower = low;
         tmp._upper = high;
         newIntervals.push_back( tmp );
-        finishOperation( newIntervals, other );
+        finishOperation( newIntervals, other, false );
         return *this;
     }
 
@@ -602,7 +618,7 @@ namespace mongo {
             newIntervals.push_back( *i );
             ++i;
         }
-        finishOperation( newIntervals, other );
+        finishOperation( newIntervals, other, false );
         return *this;
     }
 
@@ -611,6 +627,31 @@ namespace mongo {
         FieldRange temp = *this;
         temp -= other;
         return temp.empty();
+    }
+    
+    bool FieldRange::universal() const {
+        if ( empty() ) {
+            return false;
+        }
+        if ( minKey.firstElement().woCompare( min(), false ) != 0 ) {
+            return false;
+        }
+        if ( maxKey.firstElement().woCompare( max(), false ) != 0 ) {
+            return false;
+        }
+        // TODO ensure that adjacent intervals are not possible (the two intervals should be
+        // merged), and just determine if the range is universal by testing _intervals.size() == 1.
+        for ( unsigned i = 1; i < _intervals.size(); ++i ) {
+            const FieldBound &prev = _intervals[ i-1 ]._upper;
+            const FieldBound &curr = _intervals[ i ]._lower;
+            if ( !prev._inclusive && !curr._inclusive ) {
+                return false;
+            }
+            if ( prev._bound.woCompare( curr._bound ) < 0 ) {
+                return false;
+            }
+        }
+        return true;
     }
 
     void FieldRange::setExclusiveBounds() {
@@ -784,6 +825,7 @@ namespace mongo {
             }
         }
         if ( op2 == BSONObj::opELEM_MATCH ) {
+            adjustMatchField();
             BSONObjIterator k( g.embeddedObjectUserCheck() );
             while ( k.more() ) {
                 BSONElement h = k.next();
@@ -793,18 +835,18 @@ namespace mongo {
 
                 int op3 = getGtLtOp( h );
                 if ( op3 == BSONObj::Equality ) {
-                    range( fullname.c_str() ) &= FieldRange( h , _singleKey , isNot , optimize );
+                    intersectMatchField( fullname.c_str(), h, isNot, optimize );
                 }
                 else {
                     BSONObjIterator l( h.embeddedObject() );
                     while ( l.more() ) {
-                        range( fullname.c_str() ) &= FieldRange( l.next() , _singleKey , isNot , optimize );
+                        intersectMatchField( fullname.c_str(), l.next(), isNot, optimize );
                     }
                 }
             }
         }
         else {
-            range( fieldName ) &= FieldRange( f , _singleKey , isNot , optimize );
+            intersectMatchField( fieldName, f, isNot, optimize );
         }
     }
 
@@ -820,9 +862,11 @@ namespace mongo {
                     while( j.more() ) {
                         processQueryField( j.next(), optimize );
                     }
-                }            
+                }
             }
-        
+            
+            adjustMatchField();
+
             if ( strcmp( e.fieldName(), "$where" ) == 0 ) {
                 return;
             }
@@ -842,7 +886,7 @@ namespace mongo {
         }
 
         if ( equality || ( e.type() == Object && !e.embeddedObject()[ "$regex" ].eoo() ) ) {
-            range( e.fieldName() ) &= FieldRange( e , _singleKey , false , optimize );
+            intersectMatchField( e.fieldName(), e, false, optimize );    
         }
         if ( !equality ) {
             BSONObjIterator j( e.embeddedObject() );
@@ -873,14 +917,35 @@ namespace mongo {
         }
     }
 
-    FieldRangeSet::FieldRangeSet( const char *ns, const BSONObj &query, bool singleKey, bool optimize )
-        : _ns( ns ), _queries( 1, query.getOwned() ), _singleKey( singleKey ) {
+    FieldRangeSet::FieldRangeSet( const char *ns, const BSONObj &query, bool singleKey,
+                                 bool optimize ) :
+    _ns( ns ),
+    _queries( 1, query.getOwned() ),
+    _singleKey( singleKey ),
+    _simpleFiniteSet( true ) {
         BSONObjIterator i( _queries[ 0 ] );
 
         while( i.more() ) {
             processQueryField( i.next(), optimize );
         }
     }
+
+     /**
+      * TODO When operators are refactored to a standard interface, a version of this should be
+      * part of that interface.
+      */
+     void FieldRangeSet::adjustMatchField() {
+         _simpleFiniteSet = false;
+     }
+     
+     void FieldRangeSet::intersectMatchField( const char *fieldName, const BSONElement &matchElement,
+                                             bool isNot, bool optimize ) {
+         FieldRange &selectedRange = range( fieldName );
+         selectedRange &= FieldRange( matchElement, _singleKey, isNot, optimize );
+         if ( !selectedRange.simpleFiniteSet() ) {
+             _simpleFiniteSet = false;
+         }
+     }
     
     FieldRangeVector::FieldRangeVector( const FieldRangeSet &frs, const IndexSpec &indexSpec, int direction )
     :_indexSpec( indexSpec ), _direction( direction >= 0 ? 1 : -1 ) {
@@ -1081,6 +1146,15 @@ namespace mongo {
         return ret;
     }
 
+    int FieldRangeSet::numNonUniversalRanges() const {
+        int count = 0;
+        for( map<string,FieldRange>::const_iterator i = _ranges.begin(); i != _ranges.end(); ++i ) {
+            if ( !i->second.universal() )
+                ++count;
+        }
+        return count;
+    }
+    
     FieldRangeSet *FieldRangeSet::subset( const BSONObj &fields ) const {
         FieldRangeSet *ret = new FieldRangeSet( _ns, BSONObj(), _singleKey, true );
         BSONObjIterator i( fields );
@@ -1223,6 +1297,15 @@ namespace mongo {
         }
         return BSONObj();
     }
+
+     FieldRangeVectorIterator::FieldRangeVectorIterator( const FieldRangeVector &v,
+                                                        int singleIntervalLimit ) :
+     _v( v ),
+     _i( _v._ranges.size(), singleIntervalLimit ),
+     _cmp( _v._ranges.size(), 0 ),
+     _inc( _v._ranges.size(), false ),
+     _after() {
+     }
     
     // TODO optimize more
     int FieldRangeVectorIterator::advance( const BSONObj &curr ) {
@@ -1233,27 +1316,26 @@ namespace mongo {
         int latestNonEndpoint = -1;
         // iterate over fields to determine appropriate advance method
         for( int i = 0; i < (int)_i.size(); ++i ) {
-            if ( i > 0 && !_v._ranges[ i - 1 ].intervals()[ _i[ i - 1 ] ].equality() ) {
+            if ( i > 0 && !_v._ranges[ i - 1 ].intervals()[ _i.get( i - 1 ) ].equality() ) {
                 // if last bound was inequality, we don't know anything about where we are for this field
                 // TODO if possible avoid this certain cases when value in previous field of the previous
                 // key is the same as value of previous field in current key
-                setMinus( i );
+                _i.setUnknowns( i );
             }
-            bool eq = false;
             BSONElement oo = o.next();
             bool reverse = ( ( oo.number() < 0 ) ^ ( _v._direction < 0 ) );
             BSONElement jj = j.next();
-            if ( _i[ i ] == -1 ) { // unknown position for this field, do binary search
+            if ( _i.get( i ) == -1 ) { // unknown position for this field, do binary search
                 bool lowEquality;
                 int l = _v.matchingLowElement( jj, i, !reverse, lowEquality );
                 if ( l % 2 == 0 ) { // we are in a valid range for this field
-                    _i[ i ] = l / 2;
-                    int diff = (int)_v._ranges[ i ].intervals().size() - _i[ i ];
+                    _i.set( i , l / 2);
+                    int diff = (int)_v._ranges[ i ].intervals().size() - _i.get( i );
                     if ( diff > 1 ) {
                         latestNonEndpoint = i;
                     }
                     else if ( diff == 1 ) {
-                        int x = _v._ranges[ i ].intervals()[ _i[ i ] ]._upper._bound.woCompare( jj, false );
+                        int x = _v._ranges[ i ].intervals()[ _i.get( i ) ]._upper._bound.woCompare( jj, false );
                         if ( x != 0 ) {
                             latestNonEndpoint = i;
                         }
@@ -1266,87 +1348,34 @@ namespace mongo {
                         if ( latestNonEndpoint == -1 ) {
                             return -2;
                         }
-                        setZero( latestNonEndpoint + 1 );
-                        // skip to curr / latestNonEndpoint + 1 / superlative
-                        _after = true;
-                        return latestNonEndpoint + 1;
+                        return advancePastZeroed( latestNonEndpoint + 1 );
                     }
-                    _i[ i ] = ( l + 1 ) / 2;
+                    _i.set( i , ( l + 1 ) / 2);
                     if ( lowEquality ) {
-                        // skip to curr / i + 1 / superlative
-                        _after = true;
-                        return i + 1;
+                        return advancePast( i + 1 );   
                     }
-                    // skip to curr / i / nextbounds
-                    _cmp[ i ] = &_v._ranges[ i ].intervals()[ _i[ i ] ]._lower._bound;
-                    _inc[ i ] = _v._ranges[ i ].intervals()[ _i[ i ] ]._lower._inclusive;
-                    for( int j = i + 1; j < (int)_i.size(); ++j ) {
-                        _cmp[ j ] = &_v._ranges[ j ].intervals().front()._lower._bound;
-                        _inc[ j ] = _v._ranges[ j ].intervals().front()._lower._inclusive;
-                    }
-                    _after = false;
-                    return i;
+                    return advanceToLowerBound( i );
                 }
             }
             bool first = true;
-            // _i[ i ] != -1, so we have a starting interval for this field
+            bool eq = false;
+            // _i.get( i ) != -1, so we have a starting interval for this field
             // which serves as a lower/equal bound on the first iteration -
             // we advance from this interval to find a matching interval
-            while( _i[ i ] < (int)_v._ranges[ i ].intervals().size() ) {
-                // compare to current interval's upper bound
-                int x = _v._ranges[ i ].intervals()[ _i[ i ] ]._upper._bound.woCompare( jj, false );
-                if ( reverse ) {
-                    x = -x;
+            while( _i.get( i ) < (int)_v._ranges[ i ].intervals().size() ) {
+                int advanceMethod = validateCurrentInterval( i, jj, reverse, first, eq );
+                if ( advanceMethod >= 0 ) {
+                    return advanceMethod;
                 }
-                if ( x == 0 && _v._ranges[ i ].intervals()[ _i[ i ] ]._upper._inclusive ) {
-                    eq = true;
+                if ( advanceMethod == -1 && !hasReachedLimitForLastInterval( i ) ) {
                     break;
                 }
-                // see if we're less than the upper bound
-                if ( x > 0 ) {
-                    if ( i == 0 && first ) {
-                        // the value of 1st field won't go backward, so don't check lower bound
-                        // TODO maybe we can check first only?
-                        break;
-                    }
-                    // if it's an equality interval, don't need to compare separately to lower bound
-                    if ( !_v._ranges[ i ].intervals()[ _i[ i ] ].equality() ) {
-                        // compare to current interval's lower bound
-                        x = _v._ranges[ i ].intervals()[ _i[ i ] ]._lower._bound.woCompare( jj, false );
-                        if ( reverse ) {
-                            x = -x;
-                        }
-                    }
-                    // if we're equal to and not inclusive the lower bound, advance
-                    if ( ( x == 0 && !_v._ranges[ i ].intervals()[ _i[ i ] ]._lower._inclusive ) ) {
-                        setZero( i + 1 );
-                        // skip to curr / i + 1 / superlative
-                        _after = true;
-                        return i + 1;
-                    }
-                    // if we're less than the lower bound, advance
-                    if ( x > 0 ) {
-                        setZero( i + 1 );
-                        // skip to curr / i / nextbounds
-                        _cmp[ i ] = &_v._ranges[ i ].intervals()[ _i[ i ] ]._lower._bound;
-                        _inc[ i ] = _v._ranges[ i ].intervals()[ _i[ i ] ]._lower._inclusive;
-                        for( int j = i + 1; j < (int)_i.size(); ++j ) {
-                            _cmp[ j ] = &_v._ranges[ j ].intervals().front()._lower._bound;
-                            _inc[ j ] = _v._ranges[ j ].intervals().front()._lower._inclusive;
-                        }
-                        _after = false;
-                        return i;
-                    }
-                    else {
-                        break;
-                    }
-                }
-                // we're above the upper bound, so try next interval and reset remaining fields
-                ++_i[ i ];
-                setZero( i + 1 );
+                // advance to next interval and reset remaining fields
+                _i.inc( i );
+                _i.setZeroes( i + 1 );
                 first = false;
             }
-            int diff = (int)_v._ranges[ i ].intervals().size() - _i[ i ];
+            int diff = (int)_v._ranges[ i ].intervals().size() - _i.get( i );
             if ( diff > 1 || ( !eq && diff == 1 ) ) {
                 // check if we're not at the end of valid values for this field
                 latestNonEndpoint = i;
@@ -1356,12 +1385,10 @@ namespace mongo {
                     return -2;
                 }
                 // more values possible, skip...
-                setZero( latestNonEndpoint + 1 );
-                // skip to curr / latestNonEndpoint + 1 / superlative
-                _after = true;
-                return latestNonEndpoint + 1;
+                return advancePastZeroed( latestNonEndpoint + 1 );
             }
         }
+        _i.incSingleIntervalCount();
         return -1;
     }
 
@@ -1370,22 +1397,106 @@ namespace mongo {
             _cmp[ j ] = &_v._ranges[ j ].intervals().front()._lower._bound;
             _inc[ j ] = _v._ranges[ j ].intervals().front()._lower._inclusive;
         }
+        _i.resetIntervalCount();
     }
+
+    int FieldRangeVectorIterator::validateCurrentInterval( int intervalIdx,
+                                                          const BSONElement &currElt,
+                                                          bool reverse, bool first,
+                                                          bool &eqInclusiveUpperBound ) {
+        eqInclusiveUpperBound = false;
+        FieldIntervalMatcher matcher
+                ( _v._ranges[ intervalIdx ].intervals()[ _i.get( intervalIdx ) ], currElt,
+                 reverse );
+
+        if ( matcher.isEqInclusiveUpperBound() ) {
+            eqInclusiveUpperBound = true;
+            return -1;
+        }
+        if ( matcher.isGteUpperBound() ) {
+            return -2;
+        }
+
+        // below the upper bound
+
+        if ( intervalIdx == 0 && first ) {
+            // the value of 1st field won't go backward, so don't check lower bound
+            // TODO maybe we can check 'first' only?
+            return -1;
+        }
+
+        if ( matcher.isEqExclusiveLowerBound() ) {
+            return advancePastZeroed( intervalIdx + 1 );
+        }
+        if ( matcher.isLtLowerBound() ) {
+            _i.setZeroes( intervalIdx + 1 );
+            return advanceToLowerBound( intervalIdx );
+        }
+
+        return -1;
+    }
+    
+    int FieldRangeVectorIterator::advanceToLowerBound( int i ) {
+        _cmp[ i ] = &_v._ranges[ i ].intervals()[ _i.get( i ) ]._lower._bound;
+        _inc[ i ] = _v._ranges[ i ].intervals()[ _i.get( i ) ]._lower._inclusive;
+        for( int j = i + 1; j < _i.size(); ++j ) {
+            _cmp[ j ] = &_v._ranges[ j ].intervals().front()._lower._bound;
+            _inc[ j ] = _v._ranges[ j ].intervals().front()._lower._inclusive;
+        }
+        _after = false;
+        return i;
+    }
+    
+    int FieldRangeVectorIterator::advancePast( int i ) {
+        _after = true;
+        return i;
+    }
+    
+    int FieldRangeVectorIterator::advancePastZeroed( int i ) {
+        _i.setZeroes( i );
+        return advancePast( i );
+    }
+
 
     BSONObj FieldRangeVectorIterator::startKey() {
         BSONObjBuilder b;
-        for( int unsigned i = 0; i < _i.size(); ++i ) {
-            const FieldInterval &fi = _v._ranges[ i ].intervals()[ _i[ i ] ];
+        for( int i = 0; i < (int)_i.size(); ++i ) {
+            const FieldInterval &fi = _v._ranges[ i ].intervals()[ _i.get( i ) ];
             b.appendAs( fi._lower._bound, "" );
         }
         return b.obj();
     }
 
+    FieldRangeVectorIterator::FieldIntervalMatcher::FieldIntervalMatcher
+    ( const FieldInterval &interval, const BSONElement &element, bool reverse ) :
+    _interval( interval ),
+    _element( element ),
+    _reverse( reverse ) {
+    }
+    
+    int FieldRangeVectorIterator::FieldIntervalMatcher::lowerCmp() const {
+        if ( !_lowerCmp._valid ) {
+            setCmp( _lowerCmp, _interval._lower._bound );
+        }
+        return _lowerCmp._cmp;
+    }
+    
+    int FieldRangeVectorIterator::FieldIntervalMatcher::upperCmp() const {
+        if ( !_upperCmp._valid ) {
+            setCmp( _upperCmp, _interval._upper._bound );
+            if ( _interval.equality() ) {
+                _lowerCmp = _upperCmp;
+            }
+        }
+        return _upperCmp._cmp;
+    }
+
+
     // temp
     BSONObj FieldRangeVectorIterator::endKey() {
         BSONObjBuilder b;
-        for( int unsigned i = 0; i < _i.size(); ++i ) {
-            const FieldInterval &fi = _v._ranges[ i ].intervals()[ _i[ i ] ];
+        for( int i = 0; i < (int)_i.size(); ++i ) {
+            const FieldInterval &fi = _v._ranges[ i ].intervals()[ _i.get( i ) ];
             b.appendAs( fi._upper._bound, "" );
         }
         return b.obj();

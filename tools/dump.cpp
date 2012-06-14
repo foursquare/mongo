@@ -46,12 +46,13 @@ public:
         ("oplog", "Use oplog for point-in-time snapshotting" )
         ("repair", "try to recover a crashed database" )
         ("forceTableScan", "force a table scan (do not use $snapshot)" )
+        ("list", "prints all collections to STDOUT in format db.collection")
         ;
     }
 
     virtual void preSetup() {
         string out = getParam("out");
-        if ( out == "-" ) {
+        if ( out == "-" || hasParam("list") ) {
                 // write output to standard error to avoid mangling output
                 // must happen early to avoid sending junk to stdout
                 useStandardOutput(false);
@@ -136,7 +137,7 @@ public:
     }
 
     void go( const string db , const path outdir ) {
-        cout << "DATABASE: " << db << "\t to \t" << outdir.string() << endl;
+        log() << "DATABASE: " << db << "\t to \t" << outdir.string() << endl;
 
         create_directories( outdir );
 
@@ -158,8 +159,13 @@ public:
             if ( _coll != "*" && db + "." + _coll != name && _coll != name )
                 continue;
 
-            writeCollectionFile( name.c_str() , outdir / ( filename + ".bson" ) );
 
+            if(hasParam("list")) {
+                string collection = name + "\n";
+                fwrite(collection.c_str(), sizeof(char), collection.size(), stdout);
+            } else {
+                writeCollectionFile( name.c_str() , outdir / ( filename + ".bson" ) );    
+            }
         }
 
     }
@@ -404,7 +410,7 @@ public:
         string db = _db;
 
         if ( db == "*" ) {
-            cout << "all dbs" << endl;
+            log() << "all dbs" << endl;
             auth( "admin" );
 
             BSONObj res = conn( true ).findOne( "admin.$cmd" , BSON( "listDatabases" << 1 ) );

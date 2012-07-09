@@ -68,6 +68,12 @@ namespace mongo {
     public:
         FieldRange( const BSONElement &e , bool singleKey , bool isNot=false , bool optimize=true );
 
+        /**
+         * @return Range intersection with 'other'.
+         * @param singleKey - Indicate whether intersection will be performed in a single value or
+         *     multi value context.
+         */
+        const FieldRange &intersect( const FieldRange &other, bool singleKey );
         /** @return Range intersection with 'other'. */
         const FieldRange &operator&=( const FieldRange &other );
         /** @return Range union with 'other'. */
@@ -101,13 +107,21 @@ namespace mongo {
         /** @return true iff this range matches no BSONElements. */
         bool empty() const { return _intervals.empty(); }
         /**
-         * @return true in many cases when this FieldRange describes a finite set of BSONElements,
-         * all of which will be matched by the query BSONElement that generated this FieldRange.
-         * This attribute is used to implement higher level optimizations and is computed with a
-         * simple implementation that identifies common (but not all) cases satisfying the stated
-         * properties.
+         * @return true in many cases when this FieldRange represents the exact set of BSONElement
+         * values matching the query expression element used to construct the FieldRange.  This
+         * attribute is used to implement higher level optimizations and is computed with a simple
+         * implementation that identifies common (but not all) cases of this property and may return
+         * false negatives.
          */
-        bool simpleFiniteSet() const { return _simpleFiniteSet; }
+        bool mustBeExactMatchRepresentation() const { return _exactMatchRepresentation; }
+        /* Checks whether this FieldRange is a non-empty union of point-intervals.
+         * Examples:
+         *  FieldRange( { a:3 } ), isPointIntervalSet() -> true
+         *  FieldRange( { a:{ $in:[ 1, 2 ] } } ), isPointIntervalSet() -> true
+         *  FieldRange( { a:{ $gt:5 } } ), isPointIntervalSet() -> false
+         *  FieldRange( {} ), isPointIntervalSet() -> false
+         */
+        bool isPointIntervalSet() const;
         
         /** Empty the range so it matches no BSONElements. */
         void makeEmpty() { _intervals.clear(); }
@@ -126,13 +140,13 @@ namespace mongo {
     private:
         BSONObj addObj( const BSONObj &o );
         void finishOperation( const vector<FieldInterval> &newIntervals, const FieldRange &other,
-                             bool simpleFiniteSet );
+                             bool exactMatchRepresentation );
         vector<FieldInterval> _intervals;
         // Owns memory for our BSONElements.
         vector<BSONObj> _objData;
         string _special;
         bool _singleKey;
-        bool _simpleFiniteSet;
+        bool _exactMatchRepresentation;
     };
 
     /**
@@ -182,13 +196,13 @@ namespace mongo {
          */
         bool matchPossibleForIndex( const BSONObj &keyPattern ) const;
         /**
-         * @return true in many cases when this FieldRangeSet describes a finite set of BSONObjs,
-         * all of which will be matched by the query BSONObj that generated this FieldRangeSet.
-         * This attribute is used to implement higher level optimizations and is computed with a
-         * simple implementation that identifies common (but not all) cases satisfying the stated
-         * properties.
+         * @return true in many cases when this FieldRangeSet represents the exact set of BSONObjs
+         * matching the query expression used to construct the FieldRangeSet.  This attribute is
+         * used to implement higher level optimizations and is computed with a simple implementation
+         * that identifies common (but not all) cases of this property and may return false
+         * negatives.
          */
-        bool simpleFiniteSet() const { return _simpleFiniteSet; }
+        bool mustBeExactMatchRepresentation() const { return _exactMatchRepresentation; }
         
         const char *ns() const { return _ns; }
         
@@ -249,7 +263,7 @@ namespace mongo {
         // Owns memory for FieldRange BSONElements.
         vector<BSONObj> _queries;
         bool _singleKey;
-        bool _simpleFiniteSet;
+        bool _exactMatchRepresentation;
     };
 
     class NamespaceDetails;
@@ -376,8 +390,7 @@ namespace mongo {
         /**
          * @param v - a FieldRangeVector representing matching keys.
          * @param singleIntervalLimit - The maximum number of keys to match a single (compound)
-         *     interval before advancing to the next interval.  Limit checking is disabled if 0 and
-         *     must be disabled if v contains FieldIntervals that are not equality().
+         *     interval before advancing to the next interval.  Limit checking is disabled if 0.
          */
         FieldRangeVectorIterator( const FieldRangeVector &v, int singleIntervalLimit );
         
@@ -434,6 +447,7 @@ namespace mongo {
             bool isTrackingIntervalCounts() const { return _singleIntervalLimit > 0; }
             bool getSingleIntervalLimit() const { return _singleIntervalLimit; }
             bool getSingleIntervalCount() const { return _singleIntervalCount; }
+            string toString() const;
           private:
             vector<int> _i;
             int _singleIntervalCount;
@@ -500,13 +514,20 @@ namespace mongo {
         /** Skip to curr / i / superlative and reset following interval positions. */
         int advancePastZeroed( int i );
         bool hasReachedLimitForLastInterval( int intervalIdx ) const {
-            return _i.hasSingleIntervalCountReachedLimit() && ( intervalIdx + 1 == _i.size() );
-        }         
+            return
+                _i.hasSingleIntervalCountReachedLimit() &&
+                ( intervalIdx + 1 == _endNonUniversalRanges );            
+        }
+
+        /** @return the index of the last non universal range + 1. */
+        int endNonUniversalRanges() const;
+        
         const FieldRangeVector &_v;
         CompoundRangeCounter _i;
         vector<const BSONElement*> _cmp;
         vector<bool> _inc;
         bool _after;
+        int _endNonUniversalRanges;
     };
     
     /**

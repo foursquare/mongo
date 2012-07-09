@@ -1144,7 +1144,7 @@ namespace mongo {
         }
 
         int numModded = 0;
-        long long nscanned = 0;
+        debug.nscanned = 0;
         shared_ptr< MultiCursor::CursorOp > opPtr( new UpdateOp( mods.get() && mods->hasDynamicArray() ) );
         shared_ptr< MultiCursor > c( new MultiCursor( ns, patternOrig, BSONObj(), opPtr, true, hintIdElseNatural ) );
 
@@ -1156,7 +1156,7 @@ namespace mongo {
             MatchDetails details;
             auto_ptr<ClientCursor> cc;
             do {
-                nscanned++;
+                debug.nscanned++;
 
                 bool atomic = c->matcher()->docMatcher().atomic();
                 
@@ -1187,7 +1187,7 @@ namespace mongo {
                 if ( ! c->matcher()->matchesCurrent( c.get(), &details ) ) {
                     c->advance();
 
-                    if ( nscanned % 256 == 0 && ! atomic ) {
+                    if ( debug.nscanned % 256 == 0 && ! atomic ) {
                         if ( cc.get() == 0 ) {
                             shared_ptr< Cursor > cPtr = c;
                             cc.reset( new ClientCursor( QueryOption_NoCursorTimeout , cPtr , ns ) );
@@ -1235,8 +1235,6 @@ namespace mongo {
                     }
                 }
 
-                if ( profile  && !multi ) 
-                    debug.nscanned = (int) nscanned;
 
                 /* look for $inc etc.  note as listed here, all fields to inc must be this type, you can't set some
                     regular ones at the moment. */
@@ -1320,7 +1318,7 @@ namespace mongo {
                     if ( indexHack )
                         c->checkLocation();
 
-                    if ( nscanned % 64 == 0 && ! atomic ) {
+                    if ( debug.nscanned % 64 == 0 && ! atomic ) {
                         if ( cc.get() == 0 ) {
                             shared_ptr< Cursor > cPtr = c;
                             cc.reset( new ClientCursor( QueryOption_NoCursorTimeout , cPtr , ns ) );
@@ -1356,9 +1354,6 @@ namespace mongo {
 
         if ( numModded )
             return UpdateResult( 1 , 1 , numModded );
-
-        if ( profile )
-            debug.nscanned = (int) nscanned;
 
         if ( upsert ) {
             if ( updateobj.firstElementFieldName()[0] == '$' ) {

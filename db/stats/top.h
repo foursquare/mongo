@@ -64,7 +64,7 @@ namespace mongo {
 
 #if defined(MOARMETRICS)
             UsageData dataMoved;
-            UsageData waitForLock;
+            UsageData waitForWriteLock;
 #endif
         };
 
@@ -78,7 +78,7 @@ namespace mongo {
         void collectionDropped( const string& ns );
 #if defined(MOARMETRICS)
         void dataMoved( const string& ns , long long micros );
-        void waitForLock( const string& ns , long long micros );
+        void waitForWriteLock( const string& ns , long long micros );
 #endif
 
     public: // static stuff

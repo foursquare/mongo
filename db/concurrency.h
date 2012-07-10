@@ -77,18 +77,23 @@ namespace mongo {
 
 #include "mongomutex.h"
 
+#if defined(MOARMETRICS)
+# define MEASURE_WAIT( ns, expression ) \
+    long long startTime = ( dbMutex.isWriteLocked() ) ? curTimeMicros64() : 0 ; \
+    expression; \
+    if ( startTime > 0 ) Top::global.waitForWriteLock(ns, curTimeMicros64() - startTime);
+#else
+# define MEASURE_WAIT( ns, expression ) expression;
+#endif
+
 namespace mongo {
 
     struct writelock {
         writelock() { dbMutex.lock(); }
         writelock(const string& ns) {
-#if defined(MOARMETRICS)
-          long long startTime = curTimeMicros64();
-#endif
-          dbMutex.lock();
-#if defined(MOARMETRICS)
-          Top::global.waitForLock(ns, curTimeMicros64() - startTime);
-#endif
+            MEASURE_WAIT(
+                ns, dbMutex.lock();
+            );
         }
         ~writelock() {
             DESTRUCTOR_GUARD(
@@ -99,13 +104,9 @@ namespace mongo {
 
     struct readlock {
         readlock(const string& ns) {
-#if defined(MOARMETRICS)
-            long long startTime = curTimeMicros64();
-#endif
-            dbMutex.lock_shared();
-#if defined(MOARMETRICS)
-            Top::global.waitForLock(ns, curTimeMicros64() - startTime);
-#endif
+            MEASURE_WAIT(
+                ns, dbMutex.lock_shared();
+            );
         }
         readlock() { dbMutex.lock_shared(); }
         ~readlock() {
@@ -117,7 +118,9 @@ namespace mongo {
 
     struct readlocktry {
         readlocktry( const string&ns , int tryms ) {
-            _got = dbMutex.lock_shared_try( tryms );
+            MEASURE_WAIT(
+                ns, _got = dbMutex.lock_shared_try( tryms );
+            );
         }
         ~readlocktry() {
             if ( _got ) {
@@ -131,14 +134,9 @@ namespace mongo {
 
     struct writelocktry {
         writelocktry( const string&ns , int tryms ) {
-#if defined(MOARMETRICS)
-            long long startTime = curTimeMicros64();
-#endif
-            _got = dbMutex.lock_try( tryms );
-
-#if defined(MOARMETRICS)
-            Top::global.waitForLock(ns, curTimeMicros64() - startTime);
-#endif
+            MEASURE_WAIT(
+                ns, _got = dbMutex.lock_try( tryms );
+            );
         }
         ~writelocktry() {
             if ( _got ) {

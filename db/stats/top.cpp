@@ -41,7 +41,7 @@ namespace mongo {
           commands( older.commands , newer.commands )
 #if defined(MOARMETRICS)
           , dataMoved( older.dataMoved, newer.dataMoved)
-          , waitForLock( older.waitForLock, newer.waitForLock)
+          , waitForWriteLock( older.waitForWriteLock, newer.waitForWriteLock)
 #endif
     { }
 
@@ -118,13 +118,10 @@ namespace mongo {
         coll.dataMoved.inc(micros);
     }
 
-    void Top::waitForLock( const string& ns , long long micros ) {
+    void Top::waitForWriteLock( const string& ns , long long micros ) {
         scoped_lock lk(_lock);
-        // only record if > 1ms
-        if ( micros > 1000 ) {
-          CollectionData& coll = _usage[ns];
-          coll.waitForLock.inc(micros);
-        }
+        CollectionData& coll = _usage[ns];
+        coll.waitForWriteLock.inc(micros);
     }
 #endif
 
@@ -158,7 +155,7 @@ namespace mongo {
 
 #if defined(MOARMETRICS)
             _appendStatsEntry( b , "dataMoved" , coll.dataMoved );
-            _appendStatsEntry( b , "waitForLock" , coll.waitForLock );
+            _appendStatsEntry( b , "waitForWriteLock" , coll.waitForWriteLock );
 #endif
 
             bb.done();

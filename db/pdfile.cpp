@@ -509,17 +509,17 @@ namespace mongo {
                         if( diff < bestDiff ) {
                             bestDiff = diff;
                             best = e;
-                            if( ((double) diff) / approxSize < 0.1 ) { 
+                            if( ((double) diff) / approxSize < 0.1 ) {
                                 // close enough
                                 break;
                             }
-                            if( t.seconds() >= 2 ) { 
+                            if( t.seconds() >= 2 ) {
                                 // have spent lots of time in write lock, and we are in [low,high], so close enough
                                 // could come into play if extent freelist is very long
                                 break;
                             }
                         }
-                        else { 
+                        else {
                             OCCASIONALLY {
                                 if( high < 64 * 1024 && t.seconds() >= 2 ) {
                                     // be less picky if it is taking a long time
@@ -564,7 +564,7 @@ namespace mongo {
 
     /*---------------------------------------------------------------------*/
 
-    void Extent::markEmpty() { 
+    void Extent::markEmpty() {
         xnext.Null();
         xprev.Null();
         firstRecord.Null();
@@ -575,14 +575,14 @@ namespace mongo {
         return getDur().writing(this)->_reuse(nsname, capped);
     }
 
-    void getEmptyLoc(const char *ns, const DiskLoc extentLoc, int extentLength, bool capped, /*out*/DiskLoc& emptyLoc, /*out*/int& delRecLength) { 
+    void getEmptyLoc(const char *ns, const DiskLoc extentLoc, int extentLength, bool capped, /*out*/DiskLoc& emptyLoc, /*out*/int& delRecLength) {
         emptyLoc = extentLoc;
         emptyLoc.inc( Extent::HeaderSize() );
         delRecLength = extentLength - Extent::HeaderSize();
-        if( delRecLength >= 32*1024 && str::contains(ns, '$') && !capped ) { 
-            // probably an index. so skip forward to keep its records page aligned 
+        if( delRecLength >= 32*1024 && str::contains(ns, '$') && !capped ) {
+            // probably an index. so skip forward to keep its records page aligned
             int& ofs = emptyLoc.GETOFS();
-            int newOfs = (ofs + 0xfff) & ~0xfff; 
+            int newOfs = (ofs + 0xfff) & ~0xfff;
             delRecLength -= (newOfs-ofs);
             dassert( delRecLength > 0 );
             ofs = newOfs;
@@ -779,7 +779,7 @@ namespace mongo {
         log() << "end freelist" << endl;
     }
 
-    /** free a list of extents that are no longer in use.  this is a double linked list of extents 
+    /** free a list of extents that are no longer in use.  this is a double linked list of extents
         (could be just one in the list)
     */
     void freeExtents(DiskLoc firstExt, DiskLoc lastExt) {
@@ -983,7 +983,7 @@ namespace mongo {
             uassert( 10089 ,  "can't remove from a capped collection" , 0 );
             return;
         }
-        
+
         BSONObj toDelete;
         if ( doLog ) {
             BSONElement e = dl.obj()["_id"];
@@ -1049,8 +1049,15 @@ namespace mongo {
             uassert( 10003 , "failing update: objects in a capped ns cannot grow", !(d && d->capped));
             d->paddingTooSmall();
             debug.moved = true;
+#if MOARMETRICS
+            long long startTime = curTimeMicros64();
             deleteRecord(ns, toupdate, dl);
+            DiskLoc loc = insert(ns, objNew.objdata(), objNew.objsize(), god);
+            Top::global.dataMoved(ns, curTimeMicros64() - startTime);
+            return loc;
+#else
             return insert(ns, objNew.objdata(), objNew.objsize(), god);
+#endif
         }
 
         nsdt->notifyOfWriteOp();
@@ -1067,7 +1074,7 @@ namespace mongo {
                     try {
                         bool found = ii.unindex(idx.head, idx, *changes[x].removed[i], dl);
                         if ( ! found ) {
-                            RARELY warning() << "ns: " << ns << " couldn't unindex key: " << *changes[x].removed[i] 
+                            RARELY warning() << "ns: " << ns << " couldn't unindex key: " << *changes[x].removed[i]
                                              << " for doc: " << objOld["_id"] << endl;
                         }
                     }
@@ -1093,7 +1100,7 @@ namespace mongo {
                     }
                 }
             }
-            
+
             debug.keyUpdates = keyUpdates;
         }
 
@@ -1129,7 +1136,7 @@ namespace mongo {
         IndexDetails& idx = d->idx(idxNo);
         BSONObjSet keys;
         idx.getKeysFromObject(obj, keys);
-        if( keys.empty() ) 
+        if( keys.empty() )
             return;
         BSONObj order = idx.keyPattern();
         IndexInterface& ii = idx.idxInterface();
@@ -1157,7 +1164,7 @@ namespace mongo {
         }
     }
 
-#if 0    
+#if 0
     void testSorting() {
         BSONObjBuilder b;
         b.appendNull("");
@@ -1186,7 +1193,7 @@ namespace mongo {
     SortPhaseOne *precalced = 0;
 
     template< class V >
-    void buildBottomUpPhases2And3(bool dupsAllowed, IndexDetails& idx, BSONObjExternalSorter& sorter, 
+    void buildBottomUpPhases2And3(bool dupsAllowed, IndexDetails& idx, BSONObjExternalSorter& sorter,
         bool dropDups, list<DiskLoc> &dupsToDrop, CurOp * op, SortPhaseOne *phase1, ProgressMeterHolder &pm,
         Timer& t
         )
@@ -1205,7 +1212,7 @@ namespace mongo {
                     btBuilder.addKey(d.first, d.second);
                 }
                 else {
-                    btBuilder.addKey(d.first, d.second);                    
+                    btBuilder.addKey(d.first, d.second);
                 }
             }
             catch( AssertionException& e ) {
@@ -1294,7 +1301,7 @@ namespace mongo {
         /* build index --- */
         if( idx.version() == 0 )
             buildBottomUpPhases2And3<V0>(dupsAllowed, idx, sorter, dropDups, dupsToDrop, op, phase1, pm, t);
-        else if( idx.version() == 1 ) 
+        else if( idx.version() == 1 )
             buildBottomUpPhases2And3<V1>(dupsAllowed, idx, sorter, dropDups, dupsToDrop, op, phase1, pm, t);
         else
             assert(false);
@@ -1575,7 +1582,7 @@ namespace mongo {
                 BSONObj order = idx.keyPattern();
                 IndexInterface& ii = idx.idxInterface();
                 for ( BSONObjSet::iterator i=keys.begin(); i != keys.end(); i++ ) {
-                    // WARNING: findSingle may not be compound index safe.  this may need to change.  see notes in 
+                    // WARNING: findSingle may not be compound index safe.  this may need to change.  see notes in
                     // findSingle code.
                     uassert( 12582, "duplicate key insert for unique index of capped collection",
                              ii.findSingle(idx, idx.head, *i ).isNull() );
@@ -1584,8 +1591,8 @@ namespace mongo {
         }
     }
 
-    /** add a record to the end of the linked list chain within this extent. 
-        require: you must have already declared write intent for the record header.        
+    /** add a record to the end of the linked list chain within this extent.
+        require: you must have already declared write intent for the record header.
     */
     void addRecordToRecListInExtent(Record *r, DiskLoc loc) {
         dassert( loc.rec() == r );
@@ -1625,7 +1632,7 @@ namespace mongo {
     }
 
     /** used by insert and also compact
-      * @return null loc if out of space 
+      * @return null loc if out of space
       */
     DiskLoc allocateSpaceForANewRecord(const char *ns, NamespaceDetails *d, int lenWHdr, bool god) {
         DiskLoc extentLoc;
@@ -1660,15 +1667,15 @@ namespace mongo {
         return true;
     }
 
-    NOINLINE_DECL NamespaceDetails* insert_newNamespace(const char *ns, int len, bool god) { 
+    NOINLINE_DECL NamespaceDetails* insert_newNamespace(const char *ns, int len, bool god) {
         addNewNamespaceToCatalog(ns);
         /* todo: shouldn't be in the namespace catalog until after the allocations here work.
             also if this is an addIndex, those checks should happen before this!
         */
         // This may create first file in the database.
         int ies = Extent::initialSize(len);
-        if( str::contains(ns, '$') && len + Record::HeaderSize >= BtreeData_V1::BucketSize - 256 && len + Record::HeaderSize <= BtreeData_V1::BucketSize + 256 ) { 
-            // probably an index.  so we pick a value here for the first extent instead of using initialExtentSize() which is more 
+        if( str::contains(ns, '$') && len + Record::HeaderSize >= BtreeData_V1::BucketSize - 256 && len + Record::HeaderSize <= BtreeData_V1::BucketSize + 256 ) {
+            // probably an index.  so we pick a value here for the first extent instead of using initialExtentSize() which is more
             // for user collections.  TODO: we could look at the # of records in the parent collection to be smarter here.
             ies = (32+4) * 1024;
         }
@@ -1679,7 +1686,7 @@ namespace mongo {
         return d;
     }
 
-    void NOINLINE_DECL insert_makeIndex(NamespaceDetails *tableToIndex, const string& tabletoidxns, const DiskLoc& loc) { 
+    void NOINLINE_DECL insert_makeIndex(NamespaceDetails *tableToIndex, const string& tabletoidxns, const DiskLoc& loc) {
         uassert( 13143 , "can't create index on system.indexes" , tabletoidxns.find( ".system.indexes" ) == string::npos );
 
         BSONObj info = loc.obj();
@@ -1761,7 +1768,7 @@ namespace mongo {
             assert( obuf );
             BSONObj io((const char *) obuf);
             if( !prepareToBuildIndex(io, god, tabletoidxns, tableToIndex, fixedIndexObject ) ) {
-                // prepare creates _id itself, or this indicates to fail the build silently (such 
+                // prepare creates _id itself, or this indicates to fail the build silently (such
                 // as if index already exists)
                 return DiskLoc();
             }
@@ -1946,9 +1953,9 @@ namespace mongo {
 
         dbMutex.assertWriteLocked();
 
-        // Not sure we need this here, so removed.  If we do, we need to move it down 
-        // within other calls both (1) as they could be called from elsewhere and 
-        // (2) to keep the lock order right - groupcommitmutex must be locked before 
+        // Not sure we need this here, so removed.  If we do, we need to move it down
+        // within other calls both (1) as they could be called from elsewhere and
+        // (2) to keep the lock order right - groupcommitmutex must be locked before
         // mmmutex (if both are locked).
         //
         //  RWLockRecursive::Exclusive lk(MongoFile::mmmutex);

@@ -182,6 +182,9 @@ add_option( "pch" , "use precompiled headers to speed up the build (experimental
 add_option( "distcc" , "use distcc for distributing builds" , 0 , False )
 add_option( "clang" , "use clang++ rather than g++ (experimental)" , 0 , True )
 
+# moarmetrics 
+add_option( "moarMetrics", "capture some additional metrics" , 0 , False )
+
 # debugging/profiling help
 
 # to use CPUPROFILE=/tmp/profile
@@ -237,6 +240,8 @@ static = has_option( "static" )
 debugBuild = has_option( "debugBuild" ) or has_option( "debugBuildAndLogging" ) 
 debugLogging = has_option( "debugBuildAndLogging" )
 noshell = has_option( "noshell" ) 
+
+moarMetrics = has_option( "moarMetrics" ) 
 
 usesm = has_option( "usesm" )
 usev8 = has_option( "usev8" ) 
@@ -651,6 +656,9 @@ elif "win32" == os.sys.platform:
         if debugLogging:
             env.Append( CPPDEFINES=[ "_DEBUG" ] )
 
+    if moarMetrics:
+      env.Append( CPPDEFINES=[ "MOARMETRICS" ] )
+
     if force64 and os.path.exists( boostDir + "/lib/vs2010_64" ):
         env.Append( LIBPATH=[ boostDir + "/lib/vs2010_64" ] )
     elif not force64 and os.path.exists( boostDir + "/lib/vs2010_32" ):
@@ -735,6 +743,9 @@ if nix:
 
     if debugLogging:
         env.Append( CPPFLAGS=" -D_DEBUG" );
+
+    if moarMetrics:
+        env.Append( CPPFLAGS=" -DMOARMETRICS" );
 
     if force64:
         env.Append( CFLAGS="-m64" )

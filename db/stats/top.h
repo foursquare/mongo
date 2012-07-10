@@ -61,6 +61,9 @@ namespace mongo {
             UsageData update;
             UsageData remove;
             UsageData commands;
+
+            // 4sq metrics
+            UsageData dataMoved;
         };
 
         typedef map<string,CollectionData> UsageMap;
@@ -71,6 +74,9 @@ namespace mongo {
         void cloneMap(UsageMap& out) const;
         CollectionData getGlobalData() const { return _global; }
         void collectionDropped( const string& ns );
+#if MOARMETRICS
+        void dataMoved( const string& ns , long long micros );
+#endif
 
     public: // static stuff
         static Top global;

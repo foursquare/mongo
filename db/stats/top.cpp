@@ -38,8 +38,11 @@ namespace mongo {
           insert( older.insert , newer.insert ) ,
           update( older.update , newer.update ) ,
           remove( older.remove , newer.remove ),
-          commands( older.commands , newer.commands ) {
-
+          commands( older.commands , newer.commands )
+#if MOARMETRICS
+          , dataMoved( older.dataMoved, newer.dataMoved)
+#endif
+    {
     }
 
     void Top::record( const string& ns , int op , int lockType , long long micros , bool command ) {
@@ -108,6 +111,14 @@ namespace mongo {
         _lastDropped = ns;
     }
 
+#if MOARMETRICS
+    void Top::dataMoved( const string& ns , long long micros ) {
+        scoped_lock lk(_lock);
+        CollectionData& coll = _usage[ns];
+        coll.dataMoved.inc(micros);
+    }
+#endif
+
     void Top::cloneMap(Top::UsageMap& out) const {
         scoped_lock lk(_lock);
         out = _usage;
@@ -135,6 +146,10 @@ namespace mongo {
             _appendStatsEntry( b , "update" , coll.update );
             _appendStatsEntry( b , "remove" , coll.remove );
             _appendStatsEntry( b , "commands" , coll.commands );
+
+#if MOARMETRICS
+            _appendStatsEntry( b , "dataMoved" , coll.dataMoved );
+#endif
 
             bb.done();
         }

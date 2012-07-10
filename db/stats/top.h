@@ -62,8 +62,10 @@ namespace mongo {
             UsageData remove;
             UsageData commands;
 
-            // 4sq metrics
+#if defined(MOARMETRICS)
             UsageData dataMoved;
+            UsageData waitForLock;
+#endif
         };
 
         typedef map<string,CollectionData> UsageMap;
@@ -74,8 +76,9 @@ namespace mongo {
         void cloneMap(UsageMap& out) const;
         CollectionData getGlobalData() const { return _global; }
         void collectionDropped( const string& ns );
-#if MOARMETRICS
+#if defined(MOARMETRICS)
         void dataMoved( const string& ns , long long micros );
+        void waitForLock( const string& ns , long long micros );
 #endif
 
     public: // static stuff

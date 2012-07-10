@@ -1049,7 +1049,7 @@ namespace mongo {
             uassert( 10003 , "failing update: objects in a capped ns cannot grow", !(d && d->capped));
             d->paddingTooSmall();
             debug.moved = true;
-#if MOARMETRICS
+#if defined(MOARMETRICS)
             long long startTime = curTimeMicros64();
             deleteRecord(ns, toupdate, dl);
             DiskLoc loc = insert(ns, objNew.objdata(), objNew.objsize(), god);

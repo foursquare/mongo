@@ -39,11 +39,11 @@ namespace mongo {
           update( older.update , newer.update ) ,
           remove( older.remove , newer.remove ),
           commands( older.commands , newer.commands )
-#if MOARMETRICS
+#if defined(MOARMETRICS)
           , dataMoved( older.dataMoved, newer.dataMoved)
+          , waitForLock( older.waitForLock, newer.waitForLock)
 #endif
-    {
-    }
+    { }
 
     void Top::record( const string& ns , int op , int lockType , long long micros , bool command ) {
         if ( ns[0] == '?' )
@@ -111,11 +111,20 @@ namespace mongo {
         _lastDropped = ns;
     }
 
-#if MOARMETRICS
+#if defined(MOARMETRICS)
     void Top::dataMoved( const string& ns , long long micros ) {
         scoped_lock lk(_lock);
         CollectionData& coll = _usage[ns];
         coll.dataMoved.inc(micros);
+    }
+
+    void Top::waitForLock( const string& ns , long long micros ) {
+        scoped_lock lk(_lock);
+        // only record if > 1ms
+        if ( micros > 1000 ) {
+          CollectionData& coll = _usage[ns];
+          coll.waitForLock.inc(micros);
+        }
     }
 #endif
 
@@ -147,8 +156,9 @@ namespace mongo {
             _appendStatsEntry( b , "remove" , coll.remove );
             _appendStatsEntry( b , "commands" , coll.commands );
 
-#if MOARMETRICS
+#if defined(MOARMETRICS)
             _appendStatsEntry( b , "dataMoved" , coll.dataMoved );
+            _appendStatsEntry( b , "waitForLock" , coll.waitForLock );
 #endif
 
             bb.done();

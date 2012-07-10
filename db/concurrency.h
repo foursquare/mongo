@@ -29,6 +29,7 @@
 
 #pragma once
 
+#include "stats/top.h"
 #include "../util/concurrency/rwlock.h"
 #include "../util/mmap.h"
 #include "../util/time_support.h"
@@ -80,7 +81,15 @@ namespace mongo {
 
     struct writelock {
         writelock() { dbMutex.lock(); }
-        writelock(const string& ns) { dbMutex.lock(); }
+        writelock(const string& ns) {
+#if defined(MOARMETRICS)
+          long long startTime = curTimeMicros64();
+#endif
+          dbMutex.lock();
+#if defined(MOARMETRICS)
+          Top::global.waitForLock(ns, curTimeMicros64() - startTime);
+#endif
+        }
         ~writelock() {
             DESTRUCTOR_GUARD(
                 dbMutex.unlock();
@@ -90,7 +99,13 @@ namespace mongo {
 
     struct readlock {
         readlock(const string& ns) {
+#if defined(MOARMETRICS)
+            long long startTime = curTimeMicros64();
+#endif
             dbMutex.lock_shared();
+#if defined(MOARMETRICS)
+            Top::global.waitForLock(ns, curTimeMicros64() - startTime);
+#endif
         }
         readlock() { dbMutex.lock_shared(); }
         ~readlock() {
@@ -116,7 +131,14 @@ namespace mongo {
 
     struct writelocktry {
         writelocktry( const string&ns , int tryms ) {
+#if defined(MOARMETRICS)
+            long long startTime = curTimeMicros64();
+#endif
             _got = dbMutex.lock_try( tryms );
+
+#if defined(MOARMETRICS)
+            Top::global.waitForLock(ns, curTimeMicros64() - startTime);
+#endif
         }
         ~writelocktry() {
             if ( _got ) {

@@ -385,13 +385,13 @@ namespace mongo {
         else if ( ret == -1 ) {
             ++_nscanned;
 #if defined(MOARMETRICS)
-            Top::global.indexNodesTraversed(indexDetails.parentNS());
+            Top::global.indexNodesTraversed( indexDetails.parentNS() );
 #endif
             return false;
         }
         ++_nscanned;
 #if defined(MOARMETRICS)
-        Top::global.indexNodesTraversed(indexDetails.parentNS());
+        Top::global.indexNodesTraversed( indexDetails.parentNS() );
 #endif
         advanceTo( currKey(), ret, _boundsIterator->after(), _boundsIterator->cmp(), _boundsIterator->inc() );
         return true;
@@ -433,7 +433,7 @@ namespace mongo {
             if ( ok() ) {
                 ++_nscanned;
 #if defined(MOARMETRICS)
-                Top::global.indexNodesTraversed(indexDetails.parentNS());
+                Top::global.indexNodesTraversed( indexDetails.parentNS() );
 #endif
             }
         }

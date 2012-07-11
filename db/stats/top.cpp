@@ -43,6 +43,7 @@ namespace mongo {
           , dataMoved( older.dataMoved, newer.dataMoved)
           , waitForWriteLock( older.waitForWriteLock, newer.waitForWriteLock)
           , indexNodesTraversed( older.indexNodesTraversed, newer.indexNodesTraversed)
+          , geoIndexNodesTraversed( older.geoIndexNodesTraversed, newer.geoIndexNodesTraversed)
 #endif
     { }
 
@@ -130,6 +131,12 @@ namespace mongo {
         CollectionData& coll = _usage[ns];
         coll.indexNodesTraversed.inc(0);
     }
+
+    void Top::geoIndexNodesTraversed( const string& ns ) {
+        scoped_lock lk(_lock);
+        CollectionData& coll = _usage[ns];
+        coll.geoIndexNodesTraversed.inc(0);
+    }
 #endif
 
     void Top::cloneMap(Top::UsageMap& out) const {
@@ -164,6 +171,7 @@ namespace mongo {
             _appendStatsEntry( b , "dataMoved" , coll.dataMoved );
             _appendStatsEntry( b , "waitForWriteLock" , coll.waitForWriteLock );
             _appendStatsEntry( b , "indexNodesTraversed" , coll.indexNodesTraversed );
+            _appendStatsEntry( b , "geoIndexNodesTraversed" , coll.geoIndexNodesTraversed );
 #endif
 
             bb.done();

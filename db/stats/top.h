@@ -66,6 +66,7 @@ namespace mongo {
             UsageData dataMoved;
             UsageData waitForWriteLock;
             UsageData indexNodesTraversed;
+            UsageData geoIndexNodesTraversed;
 #endif
         };
 
@@ -81,6 +82,7 @@ namespace mongo {
         void dataMoved( const string& ns , long long micros );
         void waitForWriteLock( const string& ns , long long micros );
         void indexNodesTraversed( const string& ns );
+        void geoIndexNodesTraversed( const string& ns );
 #endif
 
     public: // static stuff

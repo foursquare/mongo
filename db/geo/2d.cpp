@@ -27,15 +27,18 @@
 #include "../curop-inl.h"
 #include "../matcher.h"
 #include "core.h"
+#if defined(MOARMETRICS)
+#include "../stats/top.h"
+#endif
 
-// Note: we use indexinterface herein to talk to the btree code. In the future it would be nice to 
+// Note: we use indexinterface herein to talk to the btree code. In the future it would be nice to
 //       be able to use the V1 key class (see key.h) instead of toBson() which has some cost.
 //       toBson() is new with v1 so this could be slower than it used to be?  a quick profiling
 //       might make sense.
 
 namespace mongo {
 
-    class GeoKeyNode { 
+    class GeoKeyNode {
         GeoKeyNode();
     public:
         GeoKeyNode(DiskLoc r, BSONObj k) : recordLoc(r), _key(k) { }
@@ -797,7 +800,7 @@ namespace mongo {
     void __forceLinkGeoPlugin() {
         geo2dplugin.getName();
     }
-    
+
 
 
     class GeoHopper;
@@ -893,7 +896,7 @@ namespace mongo {
 
         virtual ~GeoAccumulator() { }
 
-        /** Check if we've already looked at a key.  ALSO marks as seen, anticipating a follow-up call 
+        /** Check if we've already looked at a key.  ALSO marks as seen, anticipating a follow-up call
             to add().  This is broken out to avoid some work extracting the key bson if it's an
             already seen point.
         */
@@ -1075,7 +1078,7 @@ namespace mongo {
 
             if ( ii->isUsed(bucket, pos) ) {
                 totalFound++;
-                if( !all->seen(bucket, pos) ) { 
+                if( !all->seen(bucket, pos) ) {
                     BSONObj o;
                     DiskLoc recLoc;
                     ii->keyAt(bucket, pos, o, recLoc);
@@ -1209,6 +1212,9 @@ namespace mongo {
             if ( ! _cur.isEmpty() || _stack.size() ) {
                 if ( first ) {
                     ++_nscanned;
+#if defined(MOARMETRICS)
+                    Top::global.geoIndexNodesTraversed( _id->parentNS() );
+#endif
                 }
                 return true;
             }
@@ -1218,6 +1224,9 @@ namespace mongo {
                 if ( ! _cur.isEmpty() ) {
                     if ( first ) {
                         ++_nscanned;
+#if defined(MOARMETRICS)
+                        Top::global.geoIndexNodesTraversed( _id->parentNS() );
+#endif
                     }
                     return true;
                 }
@@ -1233,6 +1242,9 @@ namespace mongo {
                 _cur = _stack.front();
                 _stack.pop_front();
                 ++_nscanned;
+#if defined(MOARMETRICS)
+                Top::global.geoIndexNodesTraversed( _id->parentNS() );
+#endif
                 return true;
             }
 
@@ -1241,7 +1253,14 @@ namespace mongo {
 
             while ( _cur.isEmpty() && moreToDo() )
                 fillStack( maxPointsHeuristic );
-            return ! _cur.isEmpty() && ++_nscanned;
+            bool isEmpty = _cur.isEmpty();
+            if ( ! isEmpty ) {
+                ++_nscanned;
+#if defined(MOARMETRICS)
+                Top::global.geoIndexNodesTraversed( _id->parentNS() );
+#endif
+            }
+            return ! isEmpty;
         }
 
         virtual Record* _current() { assert(ok()); return _cur._loc.rec(); }
@@ -2125,6 +2144,9 @@ namespace mongo {
               _s( s ) , _cur( s->_points.begin() ) , _end( s->_points.end() ), _nscanned() {
             if ( _cur != _end ) {
                 ++_nscanned;
+#if defined(MOARMETRICS)
+                Top::global.geoIndexNodesTraversed( _id->parentNS() );
+#endif
             }
         }
 
@@ -2177,7 +2199,14 @@ namespace mongo {
         GeoHopper::Holder::iterator _cur;
         GeoHopper::Holder::iterator _end;
 
-        void incNscanned() { if ( ok() ) { ++_nscanned; } }
+        void incNscanned() {
+            if ( ok() ) {
+                ++_nscanned;
+#if defined(MOARMETRICS)
+                Top::global.indexNodesTraversed( _id->parentNS() );
+#endif
+            }
+        }
         long long _nscanned;
     };
 

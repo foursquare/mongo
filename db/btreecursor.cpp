@@ -22,7 +22,9 @@
 #include "jsobj.h"
 #include "curop-inl.h"
 #include "queryutil.h"
+#if defined(MOARMETRICS)
 #include "stats/top.h"
+#endif
 
 namespace mongo {
 

@@ -29,10 +29,12 @@
 
 #pragma once
 
-#include "stats/top.h"
 #include "../util/concurrency/rwlock.h"
 #include "../util/mmap.h"
 #include "../util/time_support.h"
+#if defined(MOARMETRICS)
+#include "stats/top.h"
+#endif
 
 namespace mongo {
 

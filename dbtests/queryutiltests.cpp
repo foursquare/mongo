@@ -866,13 +866,13 @@ namespace QueryUtilTests {
                     
                     // Intersecting two exact matches preserves the mustBeExactMatchRepresentation
                     // property.
-                    a.intersect( missing, true );
+                    a &= missing;
                     ASSERT( a.mustBeExactMatchRepresentation() );
-                    a.intersect( b, true );
+                    a &= b;
                     ASSERT( a.mustBeExactMatchRepresentation() );
                     
                     // Other operations clear the mustBeExactMatchRepresentation property.
-                    b.intersect( c, true );
+                    b &= c;
                     ASSERT( !b.mustBeExactMatchRepresentation() );
                 }
             };

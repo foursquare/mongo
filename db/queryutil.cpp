@@ -282,7 +282,7 @@ namespace mongo {
             return;
         }
         
-        if ( op == BSONObj::Equality && !isNot ) {
+        if ( optimize && !isNot && ( e.type() != Array ) ) {
             switch( op ) {
                 case BSONObj::Equality:
                 case BSONObj::LT:
@@ -490,41 +490,6 @@ namespace mongo {
         result._lower = maxLowerBound( one._lower, two._lower );
         result._upper = minUpperBound( one._upper, two._upper );
         return result.isStrictValid();
-    }
-
-    const FieldRange &FieldRange::intersect( const FieldRange &other, bool singleKey ) {
-        // Range intersections are not taken for multikey indexes.  See SERVER-958.
-        if ( !singleKey && !universal() ) {
-            // Pick 'other' range if it is smaller than or equal to 'this'.
-            if ( other <= *this ) {
-             	*this = other;
-            }
-            _exactMatchRepresentation = false;
-            return *this;
-        }
-        vector<FieldInterval> newIntervals;
-        vector<FieldInterval>::const_iterator i = _intervals.begin();
-        vector<FieldInterval>::const_iterator j = other._intervals.begin();
-        while( i != _intervals.end() && j != other._intervals.end() ) {
-            FieldInterval overlap;
-            if ( fieldIntervalOverlap( *i, *j, overlap ) ) {
-                // If the two intervals overlap, add the overlap to the result.
-                newIntervals.push_back( overlap );
-            }
-            // Increment the iterator with the current interval having the lower upper bound.  The
-            // next interval of this iterator may overlap with the current interval of the other
-            // iterator.
-            if ( i->_upper == minUpperBound( i->_upper, j->_upper ) ) {
-                ++i;
-            }
-            else {
-                ++j;
-            }
-        }
-        finishOperation( newIntervals, other,
-                         mustBeExactMatchRepresentation() &&
-                         other.mustBeExactMatchRepresentation() );
-        return *this;
     }
 
     const FieldRange &FieldRange::operator&=( const FieldRange &other ) {

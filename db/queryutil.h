@@ -68,12 +68,6 @@ namespace mongo {
     public:
         FieldRange( const BSONElement &e , bool singleKey , bool isNot=false , bool optimize=true );
 
-        /**
-         * @return Range intersection with 'other'.
-         * @param singleKey - Indicate whether intersection will be performed in a single value or
-         *     multi value context.
-         */
-        const FieldRange &intersect( const FieldRange &other, bool singleKey );
         /** @return Range intersection with 'other'. */
         const FieldRange &operator&=( const FieldRange &other );
         /** @return Range union with 'other'. */

@@ -999,7 +999,7 @@ namespace mongo {
         DiskLoc loc;
         {
             IndexDetails& i = d->idx(idIdxNo);
-            BSONObj key = i.getKeyFromQuery( patternOrig );            
+            BSONObj key = i.getKeyFromQuery( patternOrig );
             loc = i.idxInterface().findSingle(i, i.head, key);
             if( loc.isNull() ) {
                 // no upsert support in _updateById yet, so we are done.
@@ -1015,23 +1015,23 @@ namespace mongo {
                 r->touch();
                 lk.reset(0); // we have to release mmmutex before we can re-acquire dbmutex
             }
-            
+
             {
                 // we need to re-find in case something changed
                 d = nsdetails( ns );
                 if ( ! d ) {
-                    // dropped 
+                    // dropped
                     return UpdateResult(0, 0, 0);
                 }
                 nsdt = &NamespaceDetailsTransient::get_w(ns);
                 IndexDetails& i = d->idx(idIdxNo);
-                BSONObj key = i.getKeyFromQuery( patternOrig );            
+                BSONObj key = i.getKeyFromQuery( patternOrig );
                 loc = i.idxInterface().findSingle(i, i.head, key);
                 if( loc.isNull() ) {
                     // no upsert support in _updateById yet, so we are done.
                     return UpdateResult(0, 0, 0);
                 }
-                
+
                 r = loc.rec();
             }
         }
@@ -1072,6 +1072,9 @@ namespace mongo {
                     logOp("u", ns, updateobj, &pattern );
                 }
             }
+#if defined(MOARMETRICS)
+            Top::global.bytesWritten(ns, updateobj.objsize());
+#endif
             return UpdateResult( 1 , 1 , 1);
         } // end $operator update
 
@@ -1083,6 +1086,9 @@ namespace mongo {
         if ( logop ) {
             logOp("u", ns, updateobj, &patternOrig );
         }
+#if defined(MOARMETRICS)
+        Top::global.bytesWritten(ns, updateobj.objsize());
+#endif
         return UpdateResult( 1 , 0 , 1 );
     }
 
@@ -1090,7 +1096,7 @@ namespace mongo {
         DEBUGUPDATE( "update: " << ns << " update: " << updateobj << " query: " << patternOrig << " upsert: " << upsert << " multi: " << multi );
         Client& client = cc();
         int profile = client.database()->profile;
-        
+
         debug.updateobj = updateobj;
 
         // idea with these here it to make them loop invariant for multi updates, and thus be a bit faster for that case
@@ -1127,6 +1133,9 @@ namespace mongo {
                     debug.upsert = true;
                     BSONObj no = updateobj;
                     theDataFileMgr.insertWithObjMod(ns, no, god);
+#if defined(MOARMETRICS)
+                    Top::global.bytesWritten(ns, no.objsize());
+#endif
                     return UpdateResult( 0 , 0 , 1 , no );
                 }
             }
@@ -1148,14 +1157,14 @@ namespace mongo {
                 nscanned++;
 
                 bool atomic = c->matcher()->docMatcher().atomic();
-                
+
                 if ( !atomic ) {
                     // *****************
                     if ( cc.get() == 0 ) {
                         shared_ptr< Cursor > cPtr = c;
                         cc.reset( new ClientCursor( QueryOption_NoCursorTimeout , cPtr , ns ) );
                     }
-    
+
                     bool didYield;
                     if ( ! cc->yieldSometimes( ClientCursor::WillNeed, &didYield ) ) {
                         cc.release();
@@ -1164,7 +1173,7 @@ namespace mongo {
                     if ( !c->ok() ) {
                         break;
                     }
-                
+
                     if ( didYield ) {
                         d = nsdetails(ns);
                         nsdt = &NamespaceDetailsTransient::get_w(ns);
@@ -1224,7 +1233,7 @@ namespace mongo {
                     }
                 }
 
-                if ( profile  && !multi ) 
+                if ( profile  && !multi )
                     debug.nscanned = (int) nscanned;
 
                 /* look for $inc etc.  note as listed here, all fields to inc must be this type, you can't set some
@@ -1264,7 +1273,7 @@ namespace mongo {
                         mss->applyModsInPlace( true );// const_cast<BSONObj&>(onDisk) );
 
                         DEBUGUPDATE( "\t\t\t doing in place update" );
-                        if ( profile && !multi ) 
+                        if ( profile && !multi )
                             debug.fastmod = true;
 
                         if ( modsIsIndexed ) {
@@ -1303,6 +1312,9 @@ namespace mongo {
                             logOp("u", ns, updateobj, &pattern );
                         }
                     }
+#if defined(MOARMETRICS)
+                    Top::global.bytesWritten(ns, updateobj.objsize());
+#endif
                     numModded++;
                     if ( ! multi )
                         return UpdateResult( 1 , 1 , numModded );
@@ -1339,6 +1351,9 @@ namespace mongo {
                     DEV wassert( !god ); // god doesn't get logged, this would be bad.
                     logOp("u", ns, updateobj, &pattern );
                 }
+#if defined(MOARMETRICS)
+                Top::global.bytesWritten(ns, updateobj.objsize());
+#endif
                 return UpdateResult( 1 , 0 , 1 );
             } while ( c->ok() );
         } // endif
@@ -1358,7 +1373,9 @@ namespace mongo {
                 theDataFileMgr.insertWithObjMod(ns, newObj, god);
                 if ( logop )
                     logOp( "i", ns, newObj );
-
+#if defined(MOARMETRICS)
+                Top::global.bytesWritten(ns, newObj.objsize());
+#endif
                 return UpdateResult( 0 , 1 , 1 , newObj );
             }
             uassert( 10159 ,  "multi update only works with $ operators" , ! multi );
@@ -1368,6 +1385,9 @@ namespace mongo {
             theDataFileMgr.insertWithObjMod(ns, no, god);
             if ( logop )
                 logOp( "i", ns, no );
+#if defined(MOARMETRICS)
+            Top::global.bytesWritten(ns, no.objsize());
+#endif
             return UpdateResult( 0 , 0 , 1 , no );
         }
 

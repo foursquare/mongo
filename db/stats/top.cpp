@@ -29,6 +29,14 @@ namespace mongo {
         count = (newer.count >= older.count) ? (newer.count - older.count) : newer.count;
     }
 
+#if defined(MOARMETRICS)
+    Top::IOUsageData::IOUsageData( const IOUsageData& older , const IOUsageData& newer ) {
+        // this won't be 100% accurate on rollovers and drop(), but at least it won't be negative
+        bytesRead  = (newer.bytesRead  >= older.bytesRead)  ? (newer.bytesRead  - older.bytesRead)  : newer.bytesRead;
+        bytesWritten = (newer.bytesWritten >= older.bytesWritten) ? (newer.bytesWritten - older.bytesWritten) : newer.bytesWritten;
+    }
+#endif
+
     Top::CollectionData::CollectionData( const CollectionData& older , const CollectionData& newer )
         : total( older.total , newer.total ) ,
           readLock( older.readLock , newer.readLock ) ,
@@ -44,6 +52,7 @@ namespace mongo {
           , waitForWriteLock( older.waitForWriteLock, newer.waitForWriteLock)
           , indexNodesTraversed( older.indexNodesTraversed, newer.indexNodesTraversed)
           , geoIndexNodesTraversed( older.geoIndexNodesTraversed, newer.geoIndexNodesTraversed)
+          , io( older.io, newer.io)
 #endif
     { }
 
@@ -137,6 +146,18 @@ namespace mongo {
         CollectionData& coll = _usage[ns];
         coll.geoIndexNodesTraversed.inc(0);
     }
+
+    void Top::bytesRead( const string& ns , long long bytesRead ) {
+        scoped_lock lk(_lock);
+        CollectionData& coll = _usage[ns];
+        coll.io.read(bytesRead);
+    }
+
+    void Top::bytesWritten( const string& ns , long long bytesWritten ) {
+        scoped_lock lk(_lock);
+        CollectionData& coll = _usage[ns];
+        coll.io.written(bytesWritten);
+    }
 #endif
 
     void Top::cloneMap(Top::UsageMap& out) const {
@@ -172,11 +193,21 @@ namespace mongo {
             _appendStatsEntry( b , "waitForWriteLock" , coll.waitForWriteLock );
             _appendStatsEntry( b , "indexNodesTraversed" , coll.indexNodesTraversed );
             _appendStatsEntry( b , "geoIndexNodesTraversed" , coll.geoIndexNodesTraversed );
+            _appendStatsEntry( b , "io" , coll.io);
 #endif
 
             bb.done();
         }
     }
+
+#if defined(MOARMETRICS)
+    void Top::_appendStatsEntry( BSONObjBuilder& b , const char * statsName , const IOUsageData& map ) const {
+        BSONObjBuilder bb( b.subobjStart( statsName ) );
+        bb.appendNumber( "bytesRead" , map.bytesRead );
+        bb.appendNumber( "bytesWritten" , map.bytesWritten );
+        bb.done();
+    }
+#endif
 
     void Top::_appendStatsEntry( BSONObjBuilder& b , const char * statsName , const UsageData& map ) const {
         BSONObjBuilder bb( b.subobjStart( statsName ) );

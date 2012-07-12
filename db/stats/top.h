@@ -43,6 +43,22 @@ namespace mongo {
             }
         };
 
+#if defined(MOARMETRICS)
+        struct IOUsageData {
+            IOUsageData() : bytesRead(0) , bytesWritten(0) {}
+            IOUsageData( const IOUsageData& older , const IOUsageData& newer );
+            long long bytesRead;
+            long long bytesWritten;
+
+            void read( long long read ) {
+                bytesRead += read;
+            }
+            void written( long long written ) {
+                bytesWritten += written;
+            }
+        };
+#endif
+
         struct CollectionData {
             /**
              * constructs a diff
@@ -67,6 +83,7 @@ namespace mongo {
             UsageData waitForWriteLock;
             UsageData indexNodesTraversed;
             UsageData geoIndexNodesTraversed;
+            IOUsageData io;
 #endif
         };
 
@@ -83,6 +100,8 @@ namespace mongo {
         void waitForWriteLock( const string& ns , long long micros );
         void indexNodesTraversed( const string& ns );
         void geoIndexNodesTraversed( const string& ns );
+        void bytesRead( const string& ns , long long bytesRead );
+        void bytesWritten( const string& ns , long long bytesWritten );
 #endif
 
     public: // static stuff
@@ -91,6 +110,9 @@ namespace mongo {
     private:
         void _appendToUsageMap( BSONObjBuilder& b , const UsageMap& map ) const;
         void _appendStatsEntry( BSONObjBuilder& b , const char * statsName , const UsageData& map ) const;
+#if defined(MOARMETRICS)
+        void _appendStatsEntry( BSONObjBuilder& b , const char * statsName , const IOUsageData& map ) const;
+#endif
         void _record( CollectionData& c , int op , int lockType , long long micros , bool command );
 
         mutable mongo::mutex _lock;

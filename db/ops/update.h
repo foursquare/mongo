@@ -20,6 +20,9 @@
 #include "../jsobj.h"
 #include "../../util/embedded_builder.h"
 #include "../matcher.h"
+#if defined(MOARMETRICS)
+#include "../stats/top.h"
+#endif
 
 namespace mongo {
 

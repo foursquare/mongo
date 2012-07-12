@@ -41,6 +41,9 @@
 #include "ops/update.h"
 #include "ops/delete.h"
 #include "ops/query.h"
+#if defined(MOARMETRICS)
+#include "stats/top.h"
+#endif
 
 namespace mongo {
 
@@ -177,6 +180,9 @@ namespace mongo {
         try {
             dbresponse.exhaust = runQuery(m, q, op, *resp);
             assert( !resp->empty() );
+#if defined(MOARMETRICS)
+            Top::global.bytesRead(q.ns, resp->header()->dataLen());
+#endif
         }
         catch ( AssertionException& e ) {
             ok = false;
@@ -222,8 +228,8 @@ namespace mongo {
 
     void (*reportEventToSystem)(const char *msg) = 0;
 
-    void mongoAbort(const char *msg) { 
-        if( reportEventToSystem ) 
+    void mongoAbort(const char *msg) {
+        if( reportEventToSystem )
             reportEventToSystem(msg);
         rawOut(msg);
         ::abort();
@@ -381,7 +387,7 @@ namespace mongo {
                 }
             }
         }
-        
+
         debug.reset();
     } /* assembleResponse() */
 
@@ -453,7 +459,7 @@ namespace mongo {
         bool upsert = flags & UpdateOption_Upsert;
         bool multi = flags & UpdateOption_Multi;
         bool broadcast = flags & UpdateOption_Broadcast;
-        
+
         op.debug().query = query;
         op.setQuery(query);
 
@@ -461,7 +467,7 @@ namespace mongo {
 
         // writelock is used to synchronize stepdowns w/ writes
         uassert( 10054 ,  "not master", isMasterNs( ns ) );
-        
+
         // if this ever moves to outside of lock, need to adjust check Client::Context::_finishInit
         if ( ! broadcast && handlePossibleShardedMessage( m , 0 ) )
             return;
@@ -481,7 +487,7 @@ namespace mongo {
         bool broadcast = flags & RemoveOption_Broadcast;
         assert( d.moreJSObjs() );
         BSONObj pattern = d.nextJsObj();
-        
+
         op.debug().query = pattern;
         op.setQuery(pattern);
 
@@ -562,7 +568,7 @@ namespace mongo {
 
         dbresponse.response = resp;
         dbresponse.responseTo = m.header()->id;
-        
+
         if( exhaust ) {
             curop.debug().exhaust = true;
             dbresponse.exhaust = ns;
@@ -571,7 +577,7 @@ namespace mongo {
         return ok;
     }
 
-    void checkAndInsert(const char *ns, /*modifies*/BSONObj& js) { 
+    void checkAndInsert(const char *ns, /*modifies*/BSONObj& js) {
         uassert( 10059 , "object to insert too large", js.objsize() <= BSONObjMaxUserSize);
         {
             // check no $ modifiers.  note we only check top level.  (scanning deep would be quite expensive)
@@ -583,9 +589,12 @@ namespace mongo {
         }
         theDataFileMgr.insertWithObjMod(ns, js, false); // js may be modified in the call to add an _id field.
         logOp("i", ns, js);
+#if defined(MOARMETRICS)
+        Top::global.bytesWritten(ns, js.objsize());
+#endif
     }
 
-    NOINLINE_DECL void insertMulti(DbMessage& d, const char *ns, const BSONObj& _js) { 
+    NOINLINE_DECL void insertMulti(DbMessage& d, const char *ns, const BSONObj& _js) {
         const bool keepGoing = d.reservedField() & InsertOption_ContinueOnError;
         int n = 0;
         BSONObj js(_js);
@@ -630,7 +639,7 @@ namespace mongo {
 
         Client::Context ctx(ns);
 
-        if( d.moreJSObjs() ) { 
+        if( d.moreJSObjs() ) {
             insertMulti(d, ns, js);
             return;
         }
@@ -776,10 +785,10 @@ namespace mongo {
             {
                 int n = 10;
                 while( 1 ) {
-                    // we may already be in a read lock from earlier in the call stack, so do read lock here 
+                    // we may already be in a read lock from earlier in the call stack, so do read lock here
                     // to be consistent with that.
                     readlocktry w("", 20000);
-                    if( w.got() ) { 
+                    if( w.got() ) {
                         log() << "shutdown: final commit..." << endl;
                         getDur().commitNow();
                         break;
@@ -903,7 +912,7 @@ namespace mongo {
 
 #ifdef _WIN32
         lockFileHandle = CreateFileA( name.c_str(), GENERIC_READ | GENERIC_WRITE,
-            0 /* do not allow anyone else access */, NULL, 
+            0 /* do not allow anyone else access */, NULL,
             OPEN_ALWAYS /* success if fh can open */, 0, NULL );
 
         if (lockFileHandle == INVALID_HANDLE_VALUE) {
@@ -932,14 +941,14 @@ namespace mongo {
         if ( oldFile ) {
             // we check this here because we want to see if we can get the lock
             // if we can't, then its probably just another mongod running
-            
+
             string errmsg;
             if (cmdLine.dur) {
                 if (!dur::haveJournalFiles()) {
-                    
+
                     vector<string> dbnames;
                     getDatabaseNames( dbnames );
-                    
+
                     if ( dbnames.size() == 0 ) {
                         // this means that mongod crashed
                         // between initial startup and when journaling was initialized

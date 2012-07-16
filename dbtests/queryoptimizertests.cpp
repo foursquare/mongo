@@ -327,7 +327,7 @@ namespace QueryOptimizerTests {
             }
         };
         
-        namespace QueryFiniteSetOrderSuffix {
+        namespace QueryBoundsExactOrderSuffix {
             
             class Base : public QueryPlanTests::Base {
             public:
@@ -337,10 +337,10 @@ namespace QueryOptimizerTests {
                     BSONObj planOrder = order();
                     QueryPlan plan( nsd(), indexIdx(), FRSP( planQuery ), FRSP2( planQuery ),
                                    planQuery, planOrder );
-                    ASSERT_EQUALS( queryFiniteSetOrderSuffix(), plan.queryFiniteSetOrderSuffix() );
+                    ASSERT_EQUALS( queryBoundsExactOrderSuffix(), plan.queryBoundsExactOrderSuffix() );
                 }
             protected:
-                virtual bool queryFiniteSetOrderSuffix() = 0;
+                virtual bool queryBoundsExactOrderSuffix() = 0;
                 virtual int indexIdx() { return indexno( index() ); }
                 virtual BSONObj index() = 0;
                 virtual BSONObj query() = 0;
@@ -348,11 +348,11 @@ namespace QueryOptimizerTests {
             };
             
             class True : public Base {
-                bool queryFiniteSetOrderSuffix() { return true; }
+                bool queryBoundsExactOrderSuffix() { return true; }
             };
             
             class False : public Base {
-                bool queryFiniteSetOrderSuffix() { return false; }
+                bool queryBoundsExactOrderSuffix() { return false; }
             };
             
             class Unindexed : public False {
@@ -361,13 +361,25 @@ namespace QueryOptimizerTests {
                 BSONObj query() { return BSON( "a" << 1 ); }
                 BSONObj order() { return BSON( "b" << 1 ); }
             };
-            
-            class RangeQuery : public False {
+
+            class RangeSort : public True {
+                BSONObj index() { return BSON( "a" << 1 ); }
+                BSONObj query() { return BSON( "a" << GT << 1 ); }
+                BSONObj order() { return BSON( "a" << 1 ); }                
+            };
+
+            class RangeBeforeSort : public False {
                 BSONObj index() { return BSON( "a" << 1 << "b" << 1 ); }
                 BSONObj query() { return BSON( "a" << GT << 1 ); }
                 BSONObj order() { return BSON( "b" << 1 ); }                
             };
 
+            class EqualityRangeBeforeSort : public False {
+                BSONObj index() { return BSON( "a" << 1 << "b" << 1 << "c" << 1 ); }
+                BSONObj query() { return BSON( "a" << 1 << "b" << GT << 1 ); }
+                BSONObj order() { return BSON( "c" << 1 ); }                
+            };
+            
             class EqualSort : public True {
                 BSONObj index() { return BSON( "a" << 1 << "b" << 1 ); }
                 BSONObj query() { return BSON( "a" << 1 ); }
@@ -433,8 +445,62 @@ namespace QueryOptimizerTests {
                 BSONObj query() { return fromjson( "{a:4,'':{$in:[0,1]}}" ); }
                 BSONObj order() { return BSONObj(); }                
             };
+
+            class SortedRange : public True {
+                BSONObj index() { return BSON( "a" << 1 << "b" << 1 ); }
+                BSONObj query() { return fromjson( "{a:{$in:[0,1]},b:{$gt:5}}" ); }
+                BSONObj order() { return BSON( "b" << 1 ); }
+            };
             
-        } // namespace QueryFiniteSetOrderSuffix
+            class SortedRangeWrongDirection : public False {
+                BSONObj index() { return BSON( "a" << 1 << "b" << 1 ); }
+                BSONObj query() { return fromjson( "{a:{$in:[0,1]},b:{$gt:5}}" ); }
+                BSONObj order() { return BSON( "b" << -1 ); }
+            };
+            
+            class SortedDoubleRange : public True {
+                BSONObj index() { return BSON( "a" << 1 << "b" << 1 ); }
+                BSONObj query() { return fromjson( "{a:{$in:[0,1]},b:{$gt:5,$lt:10}}" ); }
+                BSONObj order() { return BSON( "b" << 1 ); }
+            };
+
+            class RangeSortPrefix : public True {
+                BSONObj index() { return BSON( "a" << 1 << "b" << 1 << "c" << 1 ); }
+                BSONObj query() { return fromjson( "{a:{$in:[0,1]},b:{$gt:5}}" ); }
+                BSONObj order() { return BSON( "b" << 1 << "c" << 1 ); }
+            };
+            
+            class RangeSortInfix : public True {
+                BSONObj index() { return BSON( "a" << 1 << "b" << 1 << "c" << 1 ); }
+                BSONObj query() { return fromjson( "{a:{$in:[0,1]},b:{$gt:5}}" ); }
+                BSONObj order() { return BSON( "a" << 1 << "b" << 1 << "c" << 1 ); }
+            };
+            
+            class RangeEquality : public False {
+                BSONObj index() { return BSON( "a" << 1 << "b" << 1 << "c" << 1 ); }
+                BSONObj query() { return fromjson( "{a:{$in:[0,1]},b:{$gt:5},c:2}" ); }
+                BSONObj order() { return BSON( "b" << 1 << "c" << 1 ); }
+            };
+
+            class RangeRange : public False {
+                BSONObj index() { return BSON( "a" << 1 << "b" << 1 << "c" << 1 ); }
+                BSONObj query() { return fromjson( "{a:{$in:[0,1]},b:{$gt:5},c:{$gt:2}}" ); }
+                BSONObj order() { return BSON( "b" << 1 << "c" << 1 ); }
+            };
+            
+            class Unsatisfiable : public False {
+                BSONObj index() { return BSON( "a" << 1 ); }
+                BSONObj query() { return fromjson( "{a:{$gt:0,$lt:0}}" ); }
+                BSONObj order() { return BSON( "a" << 1 ); }
+            };
+
+            class EqualityUnsatisfiable : public False {
+                BSONObj index() { return BSON( "a" << 1 << "b" << 1 ); }
+                BSONObj query() { return fromjson( "{a:{$in:[0,1]},b:{$gt:0,$lt:0}}" ); }
+                BSONObj order() { return BSON( "b" << 1 ); }
+            };
+            
+        } // namespace QueryBoundsExactOrderSuffix
 
     } // namespace QueryPlanTests
 
@@ -2916,19 +2982,30 @@ namespace QueryOptimizerTests {
             add<QueryPlanTests::MoreKeyMatch>();
             add<QueryPlanTests::ExactKeyQueryTypes>();
             add<QueryPlanTests::Unhelpful>();
-            add<QueryPlanTests::QueryFiniteSetOrderSuffix::Unindexed>();
-            add<QueryPlanTests::QueryFiniteSetOrderSuffix::RangeQuery>();
-            add<QueryPlanTests::QueryFiniteSetOrderSuffix::EqualSort>();
-            add<QueryPlanTests::QueryFiniteSetOrderSuffix::InSort>();
-            add<QueryPlanTests::QueryFiniteSetOrderSuffix::EqualInSort>();
-            add<QueryPlanTests::QueryFiniteSetOrderSuffix::InInSort>();
-            add<QueryPlanTests::QueryFiniteSetOrderSuffix::NonCoveredRange>();
-            add<QueryPlanTests::QueryFiniteSetOrderSuffix::QuerySortOverlap>();
-            add<QueryPlanTests::QueryFiniteSetOrderSuffix::OrderDirection>();
-            add<QueryPlanTests::QueryFiniteSetOrderSuffix::InterveningIndexField>();
-            add<QueryPlanTests::QueryFiniteSetOrderSuffix::TailingIndexField>();
-            add<QueryPlanTests::QueryFiniteSetOrderSuffix::EmptySort>();
-            add<QueryPlanTests::QueryFiniteSetOrderSuffix::EmptyStringField>();            
+            add<QueryPlanTests::QueryBoundsExactOrderSuffix::Unindexed>();
+            add<QueryPlanTests::QueryBoundsExactOrderSuffix::RangeSort>();
+            add<QueryPlanTests::QueryBoundsExactOrderSuffix::RangeBeforeSort>();
+            add<QueryPlanTests::QueryBoundsExactOrderSuffix::EqualityRangeBeforeSort>();
+            add<QueryPlanTests::QueryBoundsExactOrderSuffix::EqualSort>();
+            add<QueryPlanTests::QueryBoundsExactOrderSuffix::InSort>();
+            add<QueryPlanTests::QueryBoundsExactOrderSuffix::EqualInSort>();
+            add<QueryPlanTests::QueryBoundsExactOrderSuffix::InInSort>();
+            add<QueryPlanTests::QueryBoundsExactOrderSuffix::NonCoveredRange>();
+            add<QueryPlanTests::QueryBoundsExactOrderSuffix::QuerySortOverlap>();
+            add<QueryPlanTests::QueryBoundsExactOrderSuffix::OrderDirection>();
+            add<QueryPlanTests::QueryBoundsExactOrderSuffix::InterveningIndexField>();
+            add<QueryPlanTests::QueryBoundsExactOrderSuffix::TailingIndexField>();
+            add<QueryPlanTests::QueryBoundsExactOrderSuffix::EmptySort>();
+            add<QueryPlanTests::QueryBoundsExactOrderSuffix::EmptyStringField>();
+            add<QueryPlanTests::QueryBoundsExactOrderSuffix::SortedRange>();
+            add<QueryPlanTests::QueryBoundsExactOrderSuffix::SortedRangeWrongDirection>();
+            add<QueryPlanTests::QueryBoundsExactOrderSuffix::SortedDoubleRange>();
+            add<QueryPlanTests::QueryBoundsExactOrderSuffix::RangeSortPrefix>();
+            add<QueryPlanTests::QueryBoundsExactOrderSuffix::RangeSortInfix>();
+            add<QueryPlanTests::QueryBoundsExactOrderSuffix::RangeEquality>();
+            add<QueryPlanTests::QueryBoundsExactOrderSuffix::RangeRange>();
+            add<QueryPlanTests::QueryBoundsExactOrderSuffix::Unsatisfiable>();
+            add<QueryPlanTests::QueryBoundsExactOrderSuffix::EqualityUnsatisfiable>();
             add<QueryPlanSetTests::NoIndexes>();
             add<QueryPlanSetTests::Optimal>();
             add<QueryPlanSetTests::NoOptimal>();

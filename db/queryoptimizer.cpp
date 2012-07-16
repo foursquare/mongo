@@ -327,7 +327,7 @@ doneCheckOrder:
             _parsedQuery &&
             !_parsedQuery->wantMore() &&
             !isMultiKey() &&
-            queryFiniteSetOrderSuffix() ) {
+            queryBoundsExactOrderSuffix() ) {
             verify( 16111, _direction == 0 );
             // Limit the results for each compound interval. SERVER-5063
             return _parsedQuery->getSkip() + _parsedQuery->getNumToReturn();
@@ -335,11 +335,10 @@ doneCheckOrder:
         return 0;
     }
     
-    bool QueryPlan::queryFiniteSetOrderSuffix() const {
-        if ( !indexed() ) {
-            return false;
-        }
-        if ( !_frs.simpleFiniteSet() ) {
+    bool QueryPlan::queryBoundsExactOrderSuffix() const {
+        if ( !indexed() ||
+             !_frs.matchPossible() ||
+             !_frs.mustBeExactMatchRepresentation() ) {
             return false;
         }
         BSONObj idxKey = indexKey();
@@ -347,7 +346,16 @@ doneCheckOrder:
         BSONObjIterator order( _order );
         int coveredNonUniversalRanges = 0;
         while( index.more() ) {
-            if ( _frs.range( (*index).fieldName() ).universal() ) {
+            const FieldRange& indexFieldRange = _frs.range( (*index).fieldName() );
+            if ( !indexFieldRange.isPointIntervalSet() ) {
+                if ( !indexFieldRange.universal() ) {
+                    // The last indexed range may be a non point set containing a single interval.
+                    // SERVER-5777
+                    if ( indexFieldRange.intervals().size() > 1 ) {
+                        return false;
+                    }
+                    ++coveredNonUniversalRanges;
+                }
                 break;
             }
             ++coveredNonUniversalRanges;

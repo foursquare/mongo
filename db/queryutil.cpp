@@ -158,7 +158,7 @@ namespace mongo {
 
     FieldRange::FieldRange( const BSONElement &e, bool singleKey, bool isNot, bool optimize ) :
     _singleKey( singleKey ),
-    _simpleFiniteSet() {
+    _exactMatchRepresentation() {
         int op = e.getGtLtOp();
 
         // NOTE with $not, we could potentially form a complementary set of intervals.
@@ -193,7 +193,7 @@ namespace mongo {
                 }
             }
 
-            _simpleFiniteSet = exactMatchesOnly;
+            _exactMatchRepresentation = exactMatchesOnly;
             for( set<BSONElement,element_lt>::const_iterator i = vals.begin(); i != vals.end(); ++i )
                 _intervals.push_back( FieldInterval(*i) );
 
@@ -234,8 +234,10 @@ namespace mongo {
         upper = maxKey.firstElement();
         upperInclusive = true;
 
-        if ( e.eoo() )
+        if ( e.eoo() ) {
+            _exactMatchRepresentation = true;
             return;
+        }
 
         bool existsSpec = false;
         if ( op == BSONObj::opEXISTS ) {
@@ -280,9 +282,17 @@ namespace mongo {
             return;
         }
         
-        if ( op == BSONObj::Equality && !isNot ) {
-            // e.type() != Array here; that case was handled above.
-            _simpleFiniteSet = true;
+        if ( optimize && !isNot && ( e.type() != Array ) ) {
+            switch( op ) {
+                case BSONObj::Equality:
+                case BSONObj::LT:
+                case BSONObj::LTE:
+                case BSONObj::GT:
+                case BSONObj::GTE:
+                    _exactMatchRepresentation = true;
+                default:
+                    break;
+            }
         }
 
         if ( isNot ) {
@@ -445,36 +455,41 @@ namespace mongo {
     }
 
     void FieldRange::finishOperation( const vector<FieldInterval> &newIntervals,
-                                     const FieldRange &other, bool simpleFiniteSet ) {
+                                     const FieldRange &other, bool exactMatchRepresentation ) {
         _intervals = newIntervals;
         for( vector<BSONObj>::const_iterator i = other._objData.begin(); i != other._objData.end(); ++i )
             _objData.push_back( *i );
         if ( _special.size() == 0 && other._special.size() )
             _special = other._special;
-        _simpleFiniteSet = simpleFiniteSet;
+        _exactMatchRepresentation = exactMatchRepresentation;
     }
 
-    // as called, these functions find the max/min of a bound in the
-    // opposite direction, so inclusive bounds are considered less
-    // superlative
-    FieldBound maxFieldBound( const FieldBound &a, const FieldBound &b ) {
+    /** @return the maximum of two lower bounds, considering inclusivity. */
+    static FieldBound maxLowerBound( const FieldBound& a, const FieldBound& b ) {
         int cmp = a._bound.woCompare( b._bound, false );
         if ( ( cmp == 0 && !b._inclusive ) || cmp < 0 )
             return b;
         return a;
     }
 
-    FieldBound minFieldBound( const FieldBound &a, const FieldBound &b ) {
+    /** @return the minimum of two upper bounds, considering inclusivity. */
+    static FieldBound minUpperBound( const FieldBound& a, const FieldBound& b ) {
         int cmp = a._bound.woCompare( b._bound, false );
         if ( ( cmp == 0 && !b._inclusive ) || cmp > 0 )
             return b;
         return a;
     }
 
-    bool fieldIntervalOverlap( const FieldInterval &one, const FieldInterval &two, FieldInterval &result ) {
-        result._lower = maxFieldBound( one._lower, two._lower );
-        result._upper = minFieldBound( one._upper, two._upper );
-        return result.strictValid();
+    /**
+     * @return true when the overlap of two intervals is a valid interval.
+     * @param one, @param two - The intervals.
+     * @param result - The resulting overlap.
+     */
+    static bool fieldIntervalOverlap( const FieldInterval& one, const FieldInterval& two,
+                                      FieldInterval& result ) {
+        result._lower = maxLowerBound( one._lower, two._lower );
+        result._upper = minUpperBound( one._upper, two._upper );
+        return result.isStrictValid();
     }
 
     const FieldRange &FieldRange::operator&=( const FieldRange &other ) {
@@ -482,7 +497,7 @@ namespace mongo {
             if ( other <= *this ) {
              	*this = other;
             }
-            _simpleFiniteSet = false;
+            _exactMatchRepresentation = false;
             return *this;
         }
         vector<FieldInterval> newIntervals;
@@ -491,18 +506,22 @@ namespace mongo {
         while( i != _intervals.end() && j != other._intervals.end() ) {
             FieldInterval overlap;
             if ( fieldIntervalOverlap( *i, *j, overlap ) ) {
+                // If the two intervals overlap, add the overlap to the result.
                 newIntervals.push_back( overlap );
             }
-            if ( i->_upper == minFieldBound( i->_upper, j->_upper ) ) {
+            // Increment the iterator with the current interval having the lower upper bound.  The
+            // next interval of this iterator may overlap with the current interval of the other
+            // iterator.
+            if ( i->_upper == minUpperBound( i->_upper, j->_upper ) ) {
                 ++i;
             }
             else {
                 ++j;
             }
         }
-        // Forward simpleFiniteSet() when other is copied to *this.
-        bool simpleFiniteSet = universal() && other.simpleFiniteSet();
-        finishOperation( newIntervals, other, simpleFiniteSet );
+        finishOperation( newIntervals, other,
+                         mustBeExactMatchRepresentation() &&
+                         other.mustBeExactMatchRepresentation() );
         return *this;
     }
 
@@ -648,6 +667,19 @@ namespace mongo {
                 return false;
             }
             if ( prev._bound.woCompare( curr._bound ) < 0 ) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    bool FieldRange::isPointIntervalSet() const {
+        if ( _intervals.empty() ) {
+            return false;
+        }
+        for( vector<FieldInterval>::const_iterator i = _intervals.begin(); i != _intervals.end();
+             ++i ) {
+            if ( !i->equality() ) {
                 return false;
             }
         }
@@ -922,7 +954,7 @@ namespace mongo {
     _ns( ns ),
     _queries( 1, query.getOwned() ),
     _singleKey( singleKey ),
-    _simpleFiniteSet( true ) {
+    _exactMatchRepresentation( true ) {
         BSONObjIterator i( _queries[ 0 ] );
 
         while( i.more() ) {
@@ -935,15 +967,15 @@ namespace mongo {
       * part of that interface.
       */
      void FieldRangeSet::adjustMatchField() {
-         _simpleFiniteSet = false;
+         _exactMatchRepresentation = false;
      }
      
      void FieldRangeSet::intersectMatchField( const char *fieldName, const BSONElement &matchElement,
                                              bool isNot, bool optimize ) {
          FieldRange &selectedRange = range( fieldName );
          selectedRange &= FieldRange( matchElement, _singleKey, isNot, optimize );
-         if ( !selectedRange.simpleFiniteSet() ) {
-             _simpleFiniteSet = false;
+         if ( !selectedRange.mustBeExactMatchRepresentation() ) {
+             _exactMatchRepresentation = false;
          }
      }
     
@@ -1304,7 +1336,8 @@ namespace mongo {
      _i( _v._ranges.size(), singleIntervalLimit ),
      _cmp( _v._ranges.size(), 0 ),
      _inc( _v._ranges.size(), false ),
-     _after() {
+     _after(),
+     _endNonUniversalRanges( endNonUniversalRanges() ) {
      }
     
     // TODO optimize more
@@ -1315,7 +1348,7 @@ namespace mongo {
         // since we may need to advance from the key prefix ending with this field
         int latestNonEndpoint = -1;
         // iterate over fields to determine appropriate advance method
-        for( int i = 0; i < (int)_i.size(); ++i ) {
+        for( int i = 0; i < _endNonUniversalRanges; ++i ) {
             if ( i > 0 && !_v._ranges[ i - 1 ].intervals()[ _i.get( i - 1 ) ].equality() ) {
                 // if last bound was inequality, we don't know anything about where we are for this field
                 // TODO if possible avoid this certain cases when value in previous field of the previous
@@ -1457,6 +1490,33 @@ namespace mongo {
         return advancePast( i );
     }
 
+    /**
+     * @return true if @param range is universal or can be easily identified as a reverse universal
+     * range (see FieldRange::reverse()).
+     */
+    static bool universalOrReverseUniversalRange( const FieldRange& range ) {
+        if ( range.universal() ) {
+            return true;
+        }
+        if ( range.intervals().size() != 1 ) {
+            return false;
+        }
+        if ( !range.min().valuesEqual( maxKey.firstElement() ) ) {
+            return false;
+        }
+        if ( !range.max().valuesEqual( minKey.firstElement() ) ) {
+            return false;
+        }
+        return true;
+    }
+
+    int FieldRangeVectorIterator::endNonUniversalRanges() const {
+        int i = _v._ranges.size() - 1;
+        while( i > -1 && universalOrReverseUniversalRange( _v._ranges[ i ] ) ) {
+            --i;
+        }
+        return i + 1;
+    }
 
     BSONObj FieldRangeVectorIterator::startKey() {
         BSONObjBuilder b;
@@ -1465,6 +1525,17 @@ namespace mongo {
             b.appendAs( fi._lower._bound, "" );
         }
         return b.obj();
+    }
+
+    string FieldRangeVectorIterator::CompoundRangeCounter::toString() const {
+        BSONArrayBuilder bab;
+        for( vector<int>::const_iterator i = _i.begin(); i != _i.end(); ++i ) {
+            bab << *i;
+        }
+        return BSON( "i" << bab.arr() <<
+                     "count" << _singleIntervalCount <<
+                     "limit" << _singleIntervalLimit
+                     ).jsonString();
     }
 
     FieldRangeVectorIterator::FieldIntervalMatcher::FieldIntervalMatcher

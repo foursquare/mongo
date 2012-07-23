@@ -24,7 +24,7 @@
 #ifdef __GNUC__
 # define MONGO_NORETURN __attribute__((__noreturn__))
 #else
-# define MONGO_NORETURN 
+# define MONGO_NORETURN
 #endif
 
 namespace mongo {
@@ -60,7 +60,7 @@ namespace mongo {
         void append( BSONObjBuilder& b , const char * m = "$err" , const char * c = "code" ) const ;
         string toString() const { stringstream ss; ss << "exception: " << code << " " << msg; return ss.str(); }
         bool empty() const { return msg.empty(); }
-        
+
         void reset(){ msg = ""; code=-1; }
 
         string msg;
@@ -70,10 +70,10 @@ namespace mongo {
     /** helper class that builds error strings.  lighter weight than a StringBuilder, albeit less flexible.
         NOINLINE_DECL used in the constructor implementations as we are assuming this is a cold code path when used.
 
-        example: 
+        example:
           throw UserException(123, ErrorMsg("blah", num_val));
     */
-    class ErrorMsg { 
+    class ErrorMsg {
     public:
         ErrorMsg(const char *msg, char ch);
         ErrorMsg(const char *msg, unsigned val);
@@ -84,9 +84,9 @@ namespace mongo {
 
     class DBException : public std::exception {
     public:
-        DBException( const ExceptionInfo& ei ) : _ei(ei) {}
-        DBException( const char * msg , int code ) : _ei(msg,code) {}
-        DBException( const string& msg , int code ) : _ei(msg,code) {}
+        DBException( const ExceptionInfo& ei ) : _ei(ei) { trace( *this ); }
+        DBException( const char * msg , int code ) : _ei(msg,code) { trace( *this ); }
+        DBException( const string& msg , int code ) : _ei(msg,code) { trace( *this ); }
         virtual ~DBException() throw() { }
 
         virtual const char* what() const throw() { return _ei.msg.c_str(); }
@@ -103,6 +103,9 @@ namespace mongo {
 
     protected:
         ExceptionInfo _ei;
+
+    private:
+        static void trace( const DBException &e );
     };
 
     class AssertionException : public DBException {
@@ -144,7 +147,7 @@ namespace mongo {
     void asserted(const char *msg, const char *file, unsigned line) MONGO_NORETURN;
     void wasserted(const char *msg, const char *file, unsigned line);
     void verifyFailed( int msgid );
-    
+
     /** a "user assertion".  throws UserAssertion.  logs.  typically used for errors that a user
         could cause, such as duplicate key, disk full, etc.
     */

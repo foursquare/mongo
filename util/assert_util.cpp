@@ -52,6 +52,11 @@ namespace mongo {
             rollover();
     }
 
+    void DBException::trace( const DBException& e ) {
+        warning() << "DBException thrown" << causedBy( e ) << endl;
+        printStackTrace();
+    }
+
     void ExceptionInfo::append( BSONObjBuilder& b , const char * m , const char * c ) const {
         if ( msg.empty() )
             b.append( m , "unknown assertion" );
@@ -69,8 +74,8 @@ namespace mongo {
         static bool rateLimited;
         static time_t lastWhen;
         static unsigned lastLine;
-        if( lastLine == line && time(0)-lastWhen < 5 ) { 
-            if( rateLimited++ == 0 ) { 
+        if( lastLine == line && time(0)-lastWhen < 5 ) {
+            if( rateLimited++ == 0 ) {
                 log() << "rate limiting wassert" << endl;
             }
             return;

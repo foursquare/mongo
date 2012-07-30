@@ -177,15 +177,21 @@ namespace mongo {
                     networkCounter.append( bb );
                     bb.done();
                 }
-
+#if defined(MOARMETRICS)
+                {
+                    BSONObjBuilder bb( result.subobjStart( "serverThreads" ) );
+                    messageServerPortThreadCounter.append( bb );
+                    bb.done();
+                }
+#endif
                 {
                     RamLog* rl = RamLog::get( "warnings" );
                     verify(15879, rl);
-                    
+
                     if (rl->lastWrite() >= time(0)-(10*60)){ // only show warnings from last 10 minutes
                         vector<const char*> lines;
                         rl->get( lines );
-                        
+
                         BSONArrayBuilder arr( result.subarrayStart( "warnings" ) );
                         for ( unsigned i=std::max(0,(int)lines.size()-10); i<lines.size(); i++ )
                             arr.append( lines[i] );
@@ -344,7 +350,7 @@ namespace mongo {
                     errmsg = "no db";
                     return false;
                 }
-                
+
                 if ( dbname == "admin" ) {
                     errmsg = "can't shard the admin db";
                     return false;
@@ -359,10 +365,10 @@ namespace mongo {
                     errmsg = "already enabled";
                     return false;
                 }
-                
+
                 if ( ! okForConfigChanges( errmsg ) )
                     return false;
-                
+
                 log() << "enabling sharding on: " << dbname << endl;
 
                 config->enableSharding();
@@ -478,7 +484,7 @@ namespace mongo {
                         conn.done();
                         return false;
                     }
-                    
+
                     if( careAboutUnique && hasShardIndex && ! hasUniqueShardIndex ){
                         errmsg = (string)"can't shard collection " + ns + ", index not unique";
                         conn.done();
@@ -708,7 +714,7 @@ namespace mongo {
                     result.append( "cause" , res );
                     return false;
                 }
-                
+
                 // preemptively reload the config to get new version info
                 config->getChunkManager( ns , true );
 
@@ -763,11 +769,11 @@ namespace mongo {
                 vector<HostAndPort> serverAddrs = servers.getServers();
                 for ( size_t i = 0 ; i < serverAddrs.size() ; i++ ) {
                     if ( serverAddrs[i].isLocalHost() != grid.allowLocalHost() ) {
-                        errmsg = str::stream() << 
+                        errmsg = str::stream() <<
                             "can't use localhost as a shard since all shards need to communicate. " <<
-                            "either use all shards and configdbs in localhost or all in actual IPs " << 
+                            "either use all shards and configdbs in localhost or all in actual IPs " <<
                             " host: " << serverAddrs[i].toString() << " isLocalHost:" << serverAddrs[i].isLocalHost();
-                        
+
                         log() << "addshard request " << cmdObj << " failed: attempt to mix localhosts and IPs" << endl;
                         return false;
                     }
@@ -1091,7 +1097,7 @@ namespace mongo {
 
                 bb.append( temp.obj() );
             }
-            
+
             if ( sizes.find( "config" ) == sizes.end() ){
                 ScopedDbConnection conn( configServer.getPrimary() );
                 BSONObj x;

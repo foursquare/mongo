@@ -197,11 +197,34 @@ namespace mongo {
         _lock.unlock();
     }
 
+#if defined(MOARMETRICS)
+    void MessageServerPortThreadCounter::incActive() {
+        _lock.lock();
+        _active++;
+        _created++;
+        _lock.unlock();
+    }
+
+    void MessageServerPortThreadCounter::decActive() {
+        _lock.lock();
+        _active--;
+        _lock.unlock();
+    }
+
+    void MessageServerPortThreadCounter::append( BSONObjBuilder& b ) {
+        _lock.lock();
+        b.appendNumber( "active" , _active );
+        b.appendNumber( "created" , _created );
+        _lock.unlock();
+    }
+#endif
 
     OpCounters globalOpCounters;
     OpCounters replOpCounters;
     IndexCounters globalIndexCounters;
     FlushCounters globalFlushCounters;
     NetworkCounter networkCounter;
-
+#if defined(MOARMETRICS)
+    MessageServerPortThreadCounter messageServerPortThreadCounter;
+#endif
 }

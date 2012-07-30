@@ -42,7 +42,7 @@ namespace mongo {
             TicketHolderReleaser connTicketReleaser( &connTicketHolder );
 
             setThreadName( "conn" );
-            
+
             assert( inPort );
             inPort->setLogLevel(1);
             scoped_ptr<MessagingPort> p( inPort );
@@ -101,11 +101,15 @@ namespace mongo {
             }
 
             handler->disconnected( p.get() );
+#if defined(MOARMETRICS)
+            messageServerPortThreadCounter.decActive();
+#endif
         }
 
     }
 
     class PortMessageServer : public MessageServer , public Listener {
+
     public:
         PortMessageServer(  const MessageServer::Options& opts, MessageHandler * handler ) :
             Listener( "" , opts.ipList, opts.port ) {
@@ -129,6 +133,9 @@ namespace mongo {
 
             try {
 #ifndef __linux__  // TODO: consider making this ifdef _WIN32
+#if defined(MOARMETRICS)
+                messageServerPortThreadCounter.incActive();
+#endif
                 boost::thread thr( boost::bind( &pms::threadRun , p ) );
 #else
                 pthread_attr_t attrs;
@@ -148,6 +155,9 @@ namespace mongo {
                 }
 
 
+#if defined(MOARMETRICS)
+                messageServerPortThreadCounter.incActive();
+#endif
                 pthread_t thread;
                 int failed = pthread_create(&thread, &attrs, (void*(*)(void*)) &pms::threadRun, p);
 

@@ -56,7 +56,7 @@ namespace mongo {
     private:
         BSONObj _obj;
 
-        // todo: there will be a lot of cache line contention on these.  need to do something 
+        // todo: there will be a lot of cache line contention on these.  need to do something
         //       else eventually.
         AtomicUInt * _insert;
         AtomicUInt * _query;
@@ -155,4 +155,25 @@ namespace mongo {
     };
 
     extern NetworkCounter networkCounter;
+
+#if defined(MOARMETRICS)
+    class MessageServerPortThreadCounter {
+    public:
+        MessageServerPortThreadCounter() : _active(0), _created(0), _overflows(0) {}
+        void incActive();
+        void decActive();
+        long long getActive() { return _active; };
+        void append( BSONObjBuilder& b );
+
+    private:
+        long long _active;
+        long long _created;
+
+        long long _overflows;
+
+        SpinLock _lock;
+    };
+
+    extern MessageServerPortThreadCounter messageServerPortThreadCounter;
+#endif
 }

@@ -53,8 +53,8 @@ namespace mongo {
     }
 
     void DBException::trace( const DBException& e ) {
-        warning() << "DBException thrown" << causedBy( e ) << endl;
-        printStackTrace();
+        error() << "DBException thrown" << causedBy( e ) << endl;
+        printStackTrace( cerr );
     }
 
     void ExceptionInfo::append( BSONObjBuilder& b , const char * m , const char * c ) const {

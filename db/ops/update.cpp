@@ -121,16 +121,54 @@ namespace mongo {
             uassert( 10131 ,  "$push can only be applied to an array" , in.type() == Array );
             BSONObjBuilder bb( b.subarrayStart( shortFieldName ) );
             BSONObjIterator i( in.embeddedObject() );
-            int n=0;
-            while ( i.more() ) {
-                bb.append( i.next() );
-                n++;
+
+            if ( isEach() ) {
+                BSONObj eachObj = getEach();
+                BSONElement trimElt = elt.embeddedObjectUserCheck().getField("$trim");
+                int maxDiff = 0;
+                int n=0;
+
+                if ( trimElt.ok() ) {
+                  int trimValue = (int)trimElt.Number();
+                  uassert( 16395 , "$trim must be set to a positive integer" , trimValue > 0);
+                  maxDiff = trimValue - in.embeddedObjectUserCheck().nFields() - eachObj.nFields();
+                }
+                
+                while ( i.more() ) {
+                    BSONElement e = i.next();
+                    if ( maxDiff >= 0 ) {
+                        bb.appendAs( e , bb.numStr( n++ ) );
+                    }
+                    maxDiff++;
+                }
+
+                if ( ! trimElt.ok() ) {
+                    ms.pushStartSize = n;
+                } else {
+                    // this forces oplog rewrite
+                    ms.fixedOpName = "$set";
+                }
+
+                BSONObjIterator i( eachObj );
+                while ( i.more() ) {
+                    BSONElement e = i.next();
+                    if ( maxDiff >= 0) {
+                        bb.appendAs( e , bb.numStr( n++ ) );
+                    }
+                    maxDiff++;
+                }
+                bb.done();
+            } else {
+                int n=0;
+                while ( i.more() ) {
+                    bb.append( i.next() );
+                    n++;
+                }
+
+                ms.pushStartSize = n;
+                bb.appendAs( elt ,  bb.numStr( n ) );
+                bb.done();
             }
-
-            ms.pushStartSize = n;
-
-            bb.appendAs( elt ,  bb.numStr( n ) );
-            bb.done();
             break;
         }
 
@@ -495,7 +533,7 @@ namespace mongo {
         return mss;
     }
 
-    void ModState::appendForOpLog( BSONObjBuilder& b ) const {
+    void ModState::appendForOpLog( BSONObjBuilder& b, BSONObj newFromMod ) const {
         if ( dontApply ) {
             return;
         }
@@ -520,6 +558,14 @@ namespace mongo {
             DEBUGUPDATE( "\t\t\t\t\t appendForOpLog RENAME_TO fieldName:" << m->fieldName );
             BSONObjBuilder bb( b.subobjStart( "$set" ) );
             bb.appendAs( newVal, m->fieldName );
+            return;
+        }
+
+        if ( m->op == Mod::PUSH ) {
+            DEBUGUPDATE( "\t\t\t\t\t appendForOpLog PUSH $trim fieldName:" << m->fieldName );
+            BSONObjBuilder bb( b.subobjStart( "$set" ) );
+            bb.append( newFromMod.getField(m->fieldName) );
+            bb.done();
             return;
         }
 

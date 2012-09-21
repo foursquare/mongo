@@ -250,14 +250,12 @@ namespace mongo {
         bool isEach() const {
             if ( elt.type() != Object )
                 return false;
-            BSONElement e = elt.embeddedObject().firstElement();
-            if ( e.type() != Array )
-                return false;
-            return strcmp( e.fieldName() , "$each" ) == 0;
+            BSONElement e = elt.embeddedObject().getField("$each");
+            return e.type() == Array;
         }
 
         BSONObj getEach() const {
-            return elt.embeddedObjectUserCheck().firstElement().embeddedObjectUserCheck();
+            return elt.embeddedObjectUserCheck().getField("$each").embeddedObjectUserCheck();
         }
 
         void parseEach( BSONElementSet& s ) const {
@@ -508,7 +506,7 @@ namespace mongo {
             }
         }
 
-        void appendForOpLog( BSONObjBuilder& b ) const;
+        void appendForOpLog( BSONObjBuilder& b, BSONObj newFromMod ) const;
 
         template< class Builder >
         void apply( Builder& b , BSONElement in ) {
@@ -653,7 +651,7 @@ namespace mongo {
         BSONObj getOpLogRewrite() const {
             BSONObjBuilder b;
             for ( ModStateHolder::const_iterator i = _mods.begin(); i != _mods.end(); i++ )
-                i->second.appendForOpLog( b );
+                i->second.appendForOpLog( b , _newFromMods );
             return b.obj();
         }
 
@@ -667,7 +665,7 @@ namespace mongo {
         void appendSizeSpecForArrayDepMods( BSONObjBuilder &b ) const {
             for ( ModStateHolder::const_iterator i = _mods.begin(); i != _mods.end(); i++ ) {
                 const ModState& m = i->second;
-                if ( m.m->arrayDep() ) {
+                if ( m.m->arrayDep() && !m.fixedOpName ) {
                     if ( m.pushStartSize == -1 )
                         b.appendNull( m.fieldName() );
                     else

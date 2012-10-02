@@ -720,6 +720,7 @@ namespace mongo {
             }
 
             BSONObj repl = o["repl"].embeddedObject();
+            isMaster = repl["ismaster"].trueValue();
 
             if ( repl["setName"].type() != String || repl["setName"].String() != _name ) {
                 warning() << "node: " << conn->getServerAddress() 
@@ -747,7 +748,7 @@ namespace mongo {
 
                 node.hidden = repl["hidden"].trueValue();
                 node.secondary = repl["secondary"].trueValue();
-                node.ismaster = repl["ismaster"].trueValue();
+                node.ismaster = isMaster;
 
                 node.lastIsMaster = repl.copy();
                 // health status

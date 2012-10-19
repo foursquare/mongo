@@ -32,8 +32,8 @@ namespace mongo {
 #if defined(MOARMETRICS)
     Top::IOUsageData::IOUsageData( const IOUsageData& older , const IOUsageData& newer ) {
         // this won't be 100% accurate on rollovers and drop(), but at least it won't be negative
-        bytesRead  = (newer.bytesRead  >= older.bytesRead)  ? (newer.bytesRead  - older.bytesRead)  : newer.bytesRead;
-        bytesWritten = (newer.bytesWritten >= older.bytesWritten) ? (newer.bytesWritten - older.bytesWritten) : newer.bytesWritten;
+        readBytes = (newer.readBytes  >= older.readBytes)  ? (newer.readBytes  - older.readBytes)  : newer.readBytes;
+        writeBytes = (newer.writeBytes >= older.writeBytes) ? (newer.writeBytes - older.writeBytes) : newer.writeBytes;
     }
 #endif
 
@@ -148,28 +148,28 @@ namespace mongo {
         coll.geoIndexNodesTraversed.inc(0);
     }
 
-    void Top::diskBytesRead( const string& ns , long long bytesRead ) {
+    void Top::diskReadBytes( const string& ns , long long readBytes ) {
         scoped_lock lk(_lock);
         CollectionData& coll = _usage[ns];
-        coll.diskio.read(bytesRead);
+        coll.diskio.read(readBytes);
     }
 
-    void Top::diskBytesWritten( const string& ns , long long bytesWritten ) {
+    void Top::diskWriteBytes( const string& ns , long long writeBytes ) {
         scoped_lock lk(_lock);
         CollectionData& coll = _usage[ns];
-        coll.diskio.written(bytesWritten);
+        coll.diskio.write(writeBytes);
     }
 
-    void Top::netBytesRead( const string& ns , long long bytesRead ) {
+    void Top::netRecvBytes( const string& ns , long long recvBytes ) {
         scoped_lock lk(_lock);
         CollectionData& coll = _usage[ns];
-        coll.netio.read(bytesRead);
+        coll.netio.read(recvBytes);
     }
 
-    void Top::netBytesWritten( const string& ns , long long bytesWritten ) {
+    void Top::netSentBytes( const string& ns , long long sentBytes ) {
         scoped_lock lk(_lock);
         CollectionData& coll = _usage[ns];
-        coll.netio.written(bytesWritten);
+        coll.netio.write(sentBytes);
     }
 #endif
 
@@ -206,8 +206,8 @@ namespace mongo {
             _appendStatsEntry( b , "waitForWriteLock" , coll.waitForWriteLock );
             _appendStatsEntry( b , "indexNodesTraversed" , coll.indexNodesTraversed );
             _appendStatsEntry( b , "geoIndexNodesTraversed" , coll.geoIndexNodesTraversed );
-            _appendStatsEntry( b , "diskio" , coll.diskio);
-            _appendStatsEntry( b , "netio" , coll.netio);
+            _appendDiskStatsEntry( b , "diskio" , coll.diskio);
+            _appendNetStatsEntry( b , "netio" , coll.netio);
 #endif
 
             bb.done();
@@ -215,10 +215,17 @@ namespace mongo {
     }
 
 #if defined(MOARMETRICS)
-    void Top::_appendStatsEntry( BSONObjBuilder& b , const char * statsName , const IOUsageData& map ) const {
+    void Top::_appendDiskStatsEntry( BSONObjBuilder& b , const char * statsName , const IOUsageData& map ) const {
         BSONObjBuilder bb( b.subobjStart( statsName ) );
-        bb.appendNumber( "bytesRead" , map.bytesRead );
-        bb.appendNumber( "bytesWritten" , map.bytesWritten );
+        bb.appendNumber( "readBytes" , map.readBytes );
+        bb.appendNumber( "writeBytes" , map.writeBytes );
+        bb.done();
+    }
+
+    void Top::_appendNetStatsEntry( BSONObjBuilder& b , const char * statsName , const IOUsageData& map ) const {
+        BSONObjBuilder bb( b.subobjStart( statsName ) );
+        bb.appendNumber( "recvBytes" , map.readBytes );
+        bb.appendNumber( "sentBytes" , map.writeBytes );
         bb.done();
     }
 #endif

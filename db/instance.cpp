@@ -181,7 +181,7 @@ namespace mongo {
             dbresponse.exhaust = runQuery(m, q, op, *resp);
             assert( !resp->empty() );
 #if defined(MOARMETRICS)
-            Top::global.diskBytesRead(q.ns, resp->header()->dataLen());
+            Top::global.diskReadBytes(q.ns, resp->header()->dataLen());
 #endif
         }
         catch ( AssertionException& e ) {
@@ -590,7 +590,7 @@ namespace mongo {
         theDataFileMgr.insertWithObjMod(ns, js, false); // js may be modified in the call to add an _id field.
         logOp("i", ns, js);
 #if defined(MOARMETRICS)
-        Top::global.diskBytesWritten(ns, js.objsize());
+        Top::global.diskWriteBytes(ns, js.objsize());
 #endif
     }
 

@@ -45,16 +45,16 @@ namespace mongo {
 
 #if defined(MOARMETRICS)
         struct IOUsageData {
-            IOUsageData() : bytesRead(0) , bytesWritten(0) {}
+            IOUsageData() : readBytes(0) , writeBytes(0) {}
             IOUsageData( const IOUsageData& older , const IOUsageData& newer );
-            long long bytesRead;
-            long long bytesWritten;
+            long long readBytes;
+            long long writeBytes;
 
-            void read( long long read ) {
-                bytesRead += read;
+            void read( long long r ) {
+                readBytes += r;
             }
-            void written( long long written ) {
-                bytesWritten += written;
+            void write( long long w ) {
+                writeBytes += w;
             }
         };
 #endif
@@ -101,10 +101,10 @@ namespace mongo {
         void waitForWriteLock( const string& ns , long long micros );
         void indexNodesTraversed( const string& ns );
         void geoIndexNodesTraversed( const string& ns );
-        void diskBytesRead( const string& ns , long long bytesRead );
-        void diskBytesWritten( const string& ns , long long bytesWritten );
-        void netBytesRead( const string& ns , long long bytesRead );
-        void netBytesWritten( const string& ns , long long bytesWritten );
+        void diskReadBytes( const string& ns , long long readBytes );
+        void diskWriteBytes( const string& ns , long long writeBytes );
+        void netRecvBytes( const string& ns , long long recvBytes );
+        void netSentBytes( const string& ns , long long sentBytes );
 #endif
 
     public: // static stuff
@@ -114,7 +114,8 @@ namespace mongo {
         void _appendToUsageMap( BSONObjBuilder& b , const UsageMap& map ) const;
         void _appendStatsEntry( BSONObjBuilder& b , const char * statsName , const UsageData& map ) const;
 #if defined(MOARMETRICS)
-        void _appendStatsEntry( BSONObjBuilder& b , const char * statsName , const IOUsageData& map ) const;
+        void _appendDiskStatsEntry( BSONObjBuilder& b , const char * statsName , const IOUsageData& map ) const;
+        void _appendNetStatsEntry( BSONObjBuilder& b , const char * statsName , const IOUsageData& map ) const;
 #endif
         void _record( CollectionData& c , int op , int lockType , long long micros , bool command );
 

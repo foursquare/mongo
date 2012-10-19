@@ -194,7 +194,13 @@ namespace mongo {
         }
 
         int dataSize() const { return size() - sizeof(MSGHEADER); }
-
+#if defined(MOARMETRICS)
+        const char * getNs() const {      
+            if ( empty() )
+                return NULL;
+            return singleData()->_data + 4;
+        }
+#endif
         // concat multiple buffers - noop if <2 buffers already, otherwise can be expensive copy
         // can get rid of this if we make response handling smarter
         void concat() {

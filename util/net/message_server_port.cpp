@@ -27,6 +27,9 @@
 #include "../../db/cmdline.h"
 #include "../../db/lasterror.h"
 #include "../../db/stats/counters.h"
+#if defined(MOARMETRICS)
+#include "../../db/stats/top.h"
+#endif
 
 #ifdef __linux__  // TODO: consider making this ifndef _WIN32
 # include <sys/resource.h>
@@ -72,6 +75,14 @@ namespace mongo {
                     }
 
                     handler->process( m , p.get() , le );
+                    const char * ns = m.getNs();
+                    // ns should be populated at this point, but we check for null anyways
+                    if ( ns != NULL ) {
+                        Top::global.netBytesRead(ns, p->getBytesIn());
+                        Top::global.netBytesWritten(ns, p->getBytesOut());
+                    } else {
+                        log() << "Got a null namespace!" << endl;
+                    }
                     networkCounter.hit( p->getBytesIn() , p->getBytesOut() );
                 }
             }

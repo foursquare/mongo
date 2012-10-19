@@ -83,7 +83,8 @@ namespace mongo {
             UsageData waitForWriteLock;
             UsageData indexNodesTraversed;
             UsageData geoIndexNodesTraversed;
-            IOUsageData io;
+            IOUsageData diskio;
+            IOUsageData netio;
 #endif
         };
 
@@ -100,8 +101,10 @@ namespace mongo {
         void waitForWriteLock( const string& ns , long long micros );
         void indexNodesTraversed( const string& ns );
         void geoIndexNodesTraversed( const string& ns );
-        void bytesRead( const string& ns , long long bytesRead );
-        void bytesWritten( const string& ns , long long bytesWritten );
+        void diskBytesRead( const string& ns , long long bytesRead );
+        void diskBytesWritten( const string& ns , long long bytesWritten );
+        void netBytesRead( const string& ns , long long bytesRead );
+        void netBytesWritten( const string& ns , long long bytesWritten );
 #endif
 
     public: // static stuff

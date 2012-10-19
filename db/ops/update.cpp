@@ -1073,7 +1073,7 @@ namespace mongo {
                 }
             }
 #if defined(MOARMETRICS)
-            Top::global.bytesWritten(ns, updateobj.objsize());
+            Top::global.diskBytesWritten(ns, updateobj.objsize());
 #endif
             return UpdateResult( 1 , 1 , 1);
         } // end $operator update
@@ -1087,7 +1087,7 @@ namespace mongo {
             logOp("u", ns, updateobj, &patternOrig );
         }
 #if defined(MOARMETRICS)
-        Top::global.bytesWritten(ns, updateobj.objsize());
+        Top::global.diskBytesWritten(ns, updateobj.objsize());
 #endif
         return UpdateResult( 1 , 0 , 1 );
     }
@@ -1134,7 +1134,7 @@ namespace mongo {
                     BSONObj no = updateobj;
                     theDataFileMgr.insertWithObjMod(ns, no, god);
 #if defined(MOARMETRICS)
-                    Top::global.bytesWritten(ns, no.objsize());
+                    Top::global.diskBytesWritten(ns, no.objsize());
 #endif
                     return UpdateResult( 0 , 0 , 1 , no );
                 }
@@ -1313,7 +1313,7 @@ namespace mongo {
                         }
                     }
 #if defined(MOARMETRICS)
-                    Top::global.bytesWritten(ns, updateobj.objsize());
+                    Top::global.diskBytesWritten(ns, updateobj.objsize());
 #endif
                     numModded++;
                     if ( ! multi )
@@ -1352,7 +1352,7 @@ namespace mongo {
                     logOp("u", ns, updateobj, &pattern );
                 }
 #if defined(MOARMETRICS)
-                Top::global.bytesWritten(ns, updateobj.objsize());
+                Top::global.diskBytesWritten(ns, updateobj.objsize());
 #endif
                 return UpdateResult( 1 , 0 , 1 );
             } while ( c->ok() );
@@ -1374,7 +1374,7 @@ namespace mongo {
                 if ( logop )
                     logOp( "i", ns, newObj );
 #if defined(MOARMETRICS)
-                Top::global.bytesWritten(ns, newObj.objsize());
+                Top::global.diskBytesWritten(ns, newObj.objsize());
 #endif
                 return UpdateResult( 0 , 1 , 1 , newObj );
             }
@@ -1386,7 +1386,7 @@ namespace mongo {
             if ( logop )
                 logOp( "i", ns, no );
 #if defined(MOARMETRICS)
-            Top::global.bytesWritten(ns, no.objsize());
+            Top::global.diskBytesWritten(ns, no.objsize());
 #endif
             return UpdateResult( 0 , 0 , 1 , no );
         }

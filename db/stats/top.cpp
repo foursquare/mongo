@@ -52,7 +52,8 @@ namespace mongo {
           , waitForWriteLock( older.waitForWriteLock, newer.waitForWriteLock)
           , indexNodesTraversed( older.indexNodesTraversed, newer.indexNodesTraversed)
           , geoIndexNodesTraversed( older.geoIndexNodesTraversed, newer.geoIndexNodesTraversed)
-          , io( older.io, newer.io)
+          , diskio( older.diskio, newer.diskio)
+          , netio( older.netio, newer.netio)
 #endif
     { }
 
@@ -147,16 +148,28 @@ namespace mongo {
         coll.geoIndexNodesTraversed.inc(0);
     }
 
-    void Top::bytesRead( const string& ns , long long bytesRead ) {
+    void Top::diskBytesRead( const string& ns , long long bytesRead ) {
         scoped_lock lk(_lock);
         CollectionData& coll = _usage[ns];
-        coll.io.read(bytesRead);
+        coll.diskio.read(bytesRead);
     }
 
-    void Top::bytesWritten( const string& ns , long long bytesWritten ) {
+    void Top::diskBytesWritten( const string& ns , long long bytesWritten ) {
         scoped_lock lk(_lock);
         CollectionData& coll = _usage[ns];
-        coll.io.written(bytesWritten);
+        coll.diskio.written(bytesWritten);
+    }
+
+    void Top::netBytesRead( const string& ns , long long bytesRead ) {
+        scoped_lock lk(_lock);
+        CollectionData& coll = _usage[ns];
+        coll.netio.read(bytesRead);
+    }
+
+    void Top::netBytesWritten( const string& ns , long long bytesWritten ) {
+        scoped_lock lk(_lock);
+        CollectionData& coll = _usage[ns];
+        coll.netio.written(bytesWritten);
     }
 #endif
 
@@ -193,7 +206,8 @@ namespace mongo {
             _appendStatsEntry( b , "waitForWriteLock" , coll.waitForWriteLock );
             _appendStatsEntry( b , "indexNodesTraversed" , coll.indexNodesTraversed );
             _appendStatsEntry( b , "geoIndexNodesTraversed" , coll.geoIndexNodesTraversed );
-            _appendStatsEntry( b , "io" , coll.io);
+            _appendStatsEntry( b , "diskio" , coll.diskio);
+            _appendStatsEntry( b , "netio" , coll.netio);
 #endif
 
             bb.done();

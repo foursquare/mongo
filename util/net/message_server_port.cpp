@@ -27,6 +27,7 @@
 #include "../../db/cmdline.h"
 #include "../../db/lasterror.h"
 #include "../../db/stats/counters.h"
+#include "../../db/stats/top.h"
 
 #ifdef __linux__  // TODO: consider making this ifndef _WIN32
 # include <sys/resource.h>
@@ -72,6 +73,11 @@ namespace mongo {
                     }
 
                     handler->process( m , p.get() , le );
+                    if ( ! m.empty() ) {
+                        const char *ns = m.singleData()->_data + 4;
+                        Top::global.netRecvBytes(ns, p->getBytesIn());
+                        Top::global.netSentBytes(ns, p->getBytesOut());
+                    }
                     networkCounter.hit( p->getBytesIn() , p->getBytesOut() );
                 }
             }

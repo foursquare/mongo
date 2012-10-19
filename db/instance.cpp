@@ -177,6 +177,7 @@ namespace mongo {
         try {
             dbresponse.exhaust = runQuery(m, q, op, *resp);
             assert( !resp->empty() );
+            Top::global.diskReadBytes(q.ns, resp->header()->dataLen());
         }
         catch ( AssertionException& e ) {
             ok = false;
@@ -583,6 +584,7 @@ namespace mongo {
         }
         theDataFileMgr.insertWithObjMod(ns, js, false); // js may be modified in the call to add an _id field.
         logOp("i", ns, js);
+        Top::global.diskWriteBytes(ns, js.objsize());
     }
 
     NOINLINE_DECL void insertMulti(DbMessage& d, const char *ns, const BSONObj& _js) { 

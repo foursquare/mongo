@@ -1083,7 +1083,6 @@ namespace mongo {
                     logOp("u", ns, updateobj, &pattern );
                 }
             }
-            Top::global.diskWriteBytes(ns, updateobj.objsize());
             return UpdateResult( 1 , 1 , 1);
         } // end $operator update
 
@@ -1095,7 +1094,6 @@ namespace mongo {
         if ( logop ) {
             logOp("u", ns, updateobj, &patternOrig );
         }
-        Top::global.diskWriteBytes(ns, updateobj.objsize());
         return UpdateResult( 1 , 0 , 1 );
     }
 
@@ -1140,7 +1138,6 @@ namespace mongo {
                     debug.upsert = true;
                     BSONObj no = updateobj;
                     theDataFileMgr.insertWithObjMod(ns, no, god);
-                    Top::global.diskWriteBytes(ns, no.objsize());
                     return UpdateResult( 0 , 0 , 1 , no );
                 }
             }
@@ -1315,7 +1312,6 @@ namespace mongo {
                             logOp("u", ns, updateobj, &pattern );
                         }
                     }
-                    Top::global.diskWriteBytes(ns, updateobj.objsize());
                     numModded++;
                     if ( ! multi )
                         return UpdateResult( 1 , 1 , numModded );
@@ -1352,7 +1348,6 @@ namespace mongo {
                     DEV wassert( !god ); // god doesn't get logged, this would be bad.
                     logOp("u", ns, updateobj, &pattern );
                 }
-                Top::global.diskWriteBytes(ns, updateobj.objsize());
                 return UpdateResult( 1 , 0 , 1 );
             } while ( c->ok() );
         } // endif
@@ -1370,7 +1365,6 @@ namespace mongo {
                 if ( logop )
                     logOp( "i", ns, newObj );
 
-                Top::global.diskWriteBytes(ns, newObj.objsize());
                 return UpdateResult( 0 , 1 , 1 , newObj );
             }
             uassert( 10159 ,  "multi update only works with $ operators" , ! multi );
@@ -1381,7 +1375,6 @@ namespace mongo {
             if ( logop )
                 logOp( "i", ns, no );
 
-            Top::global.diskWriteBytes(ns, no.objsize());
             return UpdateResult( 0 , 0 , 1 , no );
         }
 

@@ -44,7 +44,6 @@ namespace mongo {
           update( older.update , newer.update ) ,
           remove( older.remove , newer.remove ),
           commands( older.commands , newer.commands ) ,
-          diskio( older.diskio, newer.diskio) ,
           netio( older.netio, newer.netio) {
     }
 
@@ -114,18 +113,6 @@ namespace mongo {
         _lastDropped = ns;
     }
 
-    void Top::diskReadBytes( const string& ns , long long readBytes ) {
-        scoped_lock lk(_lock);
-        CollectionData& coll = _usage[ns];
-        coll.diskio.read(readBytes);
-    }
-
-    void Top::diskWriteBytes( const string& ns , long long writeBytes ) {
-        scoped_lock lk(_lock);
-        CollectionData& coll = _usage[ns];
-        coll.diskio.write(writeBytes);
-    }
-
     void Top::netRecvBytes( const string& ns , long long recvBytes ) {
         scoped_lock lk(_lock);
         CollectionData& coll = _usage[ns];
@@ -166,7 +153,6 @@ namespace mongo {
             _appendStatsEntry( b , "remove" , coll.remove );
             _appendStatsEntry( b , "commands" , coll.commands );
 
-            _appendDiskStatsEntry( b , coll.diskio);
             _appendNetStatsEntry( b , coll.netio);
 
             bb.done();
@@ -177,13 +163,6 @@ namespace mongo {
         BSONObjBuilder bb( b.subobjStart( statsName ) );
         bb.appendNumber( "time" , map.time );
         bb.appendNumber( "count" , map.count );
-        bb.done();
-    }
-
-    void Top::_appendDiskStatsEntry( BSONObjBuilder& b , const IOUsageData& map ) const {
-        BSONObjBuilder bb( b.subobjStart( "diskio" ) );
-        bb.appendNumber( "readBytes" , map.readBytes );
-        bb.appendNumber( "writeBytes" , map.writeBytes );
         bb.done();
     }
 

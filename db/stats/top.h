@@ -75,7 +75,6 @@ namespace mongo {
             UsageData update;
             UsageData remove;
             UsageData commands;
-            IOUsageData diskio;
             IOUsageData netio;
         };
 
@@ -87,8 +86,6 @@ namespace mongo {
         void cloneMap(UsageMap& out) const;
         CollectionData getGlobalData() const { return _global; }
         void collectionDropped( const string& ns );
-        void diskReadBytes( const string& ns , long long readBytes );
-        void diskWriteBytes( const string& ns , long long writeBytes );
         void netRecvBytes( const string& ns , long long recvBytes );
         void netSentBytes( const string& ns , long long sentBytes );
 

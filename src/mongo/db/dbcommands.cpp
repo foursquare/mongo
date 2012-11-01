@@ -51,6 +51,7 @@
 #include "../server.h"
 #include "mongo/db/index_update.h"
 #include "mongo/db/repl/bgsync.h"
+#include "modules/killfilewatcher.h"
 
 namespace mongo {
 
@@ -508,6 +509,31 @@ namespace mongo {
             result.appendDate( "localTime" , jsTime() );
 
             reportLockStats(result);
+
+            {
+                BSONObjBuilder health;
+
+                string msg = "healthy";
+                bool healthy = true;
+
+                bool killFileExists = killFileWatcher.isKilled();
+                if (killFileExists) {
+                    healthy = false;
+                    string killFileContents = killFileWatcher.contentsOfKillFile();
+                    if (killFileContents.size() == 0) {
+                        msg = "kill file is present, forcing unhealthy status";
+                    } else {
+                        msg = "kill file is present, forcing unhealthy status: " + killFileContents;
+                    }
+                }
+
+                health.append("ok", healthy);
+                health.append("msg", msg);
+                health.append("killFile", killFileExists);
+
+                result.append("healthStatus", health.obj());
+            }
+            timeBuilder.appendNumber( "after health" , Listener::getElapsedTimeMillis() - start );
 
             {
                 BSONObjBuilder t;

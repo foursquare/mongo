@@ -192,7 +192,7 @@ namespace mongo {
         void run() {
             log() << "starting" << endl;
             while ( ! inShutdown() ) {
-                sleepsecs( 10 );
+                sleepsecs( ReplicaSetMonitor::getSleepSecs() );
                 try {
                     ReplicaSetMonitor::checkAll( true );
                 }
@@ -349,6 +349,14 @@ namespace mongo {
     void ReplicaSetMonitor::setLocalThresholdMillis( const int millis ) {
         scoped_lock lk( _lock );
         _localThresholdMillis = millis;
+    }
+
+    void ReplicaSetMonitor::setSleepSecs( int sleepSecs ) {
+        _sleepSecs = sleepSecs;
+    }
+
+    int ReplicaSetMonitor::getSleepSecs() {
+        return _sleepSecs;
     }
 
     string ReplicaSetMonitor::getServerAddress() const {
@@ -699,18 +707,29 @@ namespace mongo {
         try {
             Timer t;
             BSONObj o;
-            conn->isMaster( isMaster, &o );
+            conn->serverStatus(&o);
 
-            if ( o["setName"].type() != String || o["setName"].String() != _name ) {
-                warning() << "node: " << conn->getServerAddress()
-                          << " isn't a part of set: " << _name
-                          << " ismaster: " << o << endl;
-
+            if ( !(o.hasField("repl") && o["repl"].type() == Object) ) {
+                warning() << "node: " << conn->getServerAddress() 
+                          << " isn't a part of any replica set. serverStatus: " << o << endl;
                 if ( nodesOffset >= 0 ) {
                     scoped_lock lk( _lock );
                     _nodes[nodesOffset].ok = false;
                 }
+                return false;
+            }
 
+            BSONObj repl = o["repl"].embeddedObject();
+            isMaster = repl["ismaster"].trueValue();
+
+            if ( repl["setName"].type() != String || repl["setName"].String() != _name ) {
+                warning() << "node: " << conn->getServerAddress() 
+                          << " isn't a part of set: " << _name 
+                          << " ismaster: " << repl << endl;
+                if ( nodesOffset >= 0 ) {
+                    scoped_lock lk( _lock );
+                    _nodes[nodesOffset].ok = false;
+                }
                 return false;
             }
             int commandTime = t.millis();
@@ -727,28 +746,39 @@ namespace mongo {
                     node.pingTimeMillis += (commandTime - node.pingTimeMillis) / 4;
                 }
 
-                node.hidden = o["hidden"].trueValue();
-                node.secondary = o["secondary"].trueValue();
-                node.ismaster = o["ismaster"].trueValue();
+                node.hidden = repl["hidden"].trueValue();
+                node.secondary = repl["secondary"].trueValue();
+                node.ismaster = isMaster;
 
-                node.lastIsMaster = o.copy();
+                node.lastIsMaster = repl.copy();
+                // health status
+                if ( (o.hasField("healthStatus") && o["healthStatus"].type() == Object) ) {
+                    BSONObj healthStatus = o["healthStatus"].embeddedObject();
+                    if ( healthStatus["ok"].trueValue() ) {
+                        node.healthCheckFailCount = 0;
+                    } else {
+                        node.healthCheckFailCount += 1;
+                    }
+                    node.healthMsg = healthStatus["msg"].String();
+                    node.healthKillFile = healthStatus["killFile"].trueValue();
+                }
             }
 
             log( ! verbose ) << "ReplicaSetMonitor::_checkConnection: " << conn->toString()
-                             << ' ' << o << endl;
+                             << ' ' << repl << endl;
             
             // add other nodes
             BSONArrayBuilder b;
-            if ( o["hosts"].type() == Array ) {
-                if ( o["primary"].type() == String )
-                    maybePrimary = o["primary"].String();
+            if ( repl["hosts"].type() == Array ) {
+                if ( repl["primary"].type() == String )
+                    maybePrimary = repl["primary"].String();
 
-                BSONObjIterator it( o["hosts"].Obj() );
+                BSONObjIterator it( repl["hosts"].Obj() );
                 while( it.more() ) b.append( it.next() );
             }
 
-            if (o.hasField("passives") && o["passives"].type() == Array) {
-                BSONObjIterator it( o["passives"].Obj() );
+            if (repl.hasField("passives") && repl["passives"].type() == Array) {
+                BSONObjIterator it( repl["passives"].Obj() );
                 while( it.more() ) b.append( it.next() );
             }
             
@@ -984,6 +1014,9 @@ namespace mongo {
             builder.append("hidden", node.hidden);
             builder.append("secondary", node.secondary);
             builder.append("pingTimeMillis", node.pingTimeMillis);
+            builder.append("healthMsg", node.healthMsg);
+            builder.append("healthKillFile", node.healthKillFile);
+            builder.append("healthCheckFailCount", node.healthCheckFailCount);
 
             const BSONElement& tagElem = node.lastIsMaster["tags"];
             if (tagElem.ok() && tagElem.isABSONObj()) {
@@ -1248,6 +1281,7 @@ namespace mongo {
     map<string,ReplicaSetMonitorPtr> ReplicaSetMonitor::_sets;
     map<string,vector<HostAndPort> > ReplicaSetMonitor::_seedServers;
     ReplicaSetMonitor::ConfigChangeHook ReplicaSetMonitor::_hook;
+    int ReplicaSetMonitor::_sleepSecs;
     int ReplicaSetMonitor::_maxFailedChecks = 30; // At 1 check every 10 seconds, 30 checks takes 5 minutes
 
     // --------------------------------

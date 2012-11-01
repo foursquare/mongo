@@ -520,6 +520,7 @@ namespace mongo {
     }
 
     BSONObj ismastercmdobj = fromjson("{\"ismaster\":1}");
+    BSONObj serverstatuscmdobj = fromjson("{\"serverStatus\":1}");
 
     bool DBClientWithCommands::isMaster(bool& isMaster, BSONObj *info) {
         BSONObj o;
@@ -528,6 +529,13 @@ namespace mongo {
         bool ok = runCommand("admin", ismastercmdobj, *info);
         isMaster = info->getField("ismaster").trueValue();
         return ok;
+    }
+
+    bool DBClientWithCommands::serverStatus(BSONObj *info) {
+        BSONObj o;
+        if ( info == 0 )    info = &o;
+        
+        return runCommand("admin", serverstatuscmdobj, *info);
     }
 
     bool DBClientWithCommands::createCollection(const string &ns, long long size, bool capped, int max, BSONObj *info) {

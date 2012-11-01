@@ -581,6 +581,13 @@ namespace mongo {
         return ok;
     }
 
+    bool DBClientWithCommands::serverStatus(BSONObj *info) {
+        BSONObj o;
+        if ( info == 0 )    info = &o;
+        
+        return runCommand("admin", serverstatuscmdobj, *info);
+    }
+
     bool DBClientWithCommands::createCollection(const string &ns, long long size, bool capped, int max, BSONObj *info) {
         verify(!capped||size);
         BSONObj o;

@@ -48,7 +48,7 @@ namespace mongo {
 
         ~MMS() {}
 
-        void config( boost::program_options::variables_map& params ) {
+        bool config( boost::program_options::variables_map& params ) {
             _baseurl = params["mms-url"].as<string>();
             if ( params.count( "mms-token" ) ) {
                 _token = params["mms-token"].as<string>();
@@ -57,6 +57,7 @@ namespace mongo {
                 _name = params["mms-name"].as<string>();
             }
             _secsToSleep = params["mms-interval"].as<int>();
+            return true;
         }
 
         void run() {

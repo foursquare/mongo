@@ -1049,7 +1049,10 @@ static int mongoDbMain(int argc, char* argv[]) {
         if( repairpath.empty() )
             repairpath = dbpath;
 
-        Module::configAll( params );
+        if (!Module::configAll( params )) {
+            log() << "bad module configuration! see earlier logs for more detailed errors" << endl;
+            dbexit(EXIT_BADOPTIONS);
+        }
         dataFileSync.go();
 
         if (params.count("command")) {

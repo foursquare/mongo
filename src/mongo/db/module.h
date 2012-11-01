@@ -42,7 +42,7 @@ namespace mongo {
         /**
          * read config from command line
          */
-        virtual void config( boost::program_options::variables_map& params ) = 0;
+        virtual bool config( boost::program_options::variables_map& params ) = 0;
 
         /**
          * called after configuration when the server is ready start
@@ -59,7 +59,8 @@ namespace mongo {
         // --- static things
 
         static void addOptions( boost::program_options::options_description& options );
-        static void configAll( boost::program_options::variables_map& params );
+        // Returns false if the params are invalid and startup should be aborted.
+        static bool configAll( boost::program_options::variables_map& params );
         static void initAll();
 
     private:

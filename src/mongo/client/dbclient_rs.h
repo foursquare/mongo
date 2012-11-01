@@ -62,11 +62,15 @@ namespace mongo {
                 ismaster(false),
                 secondary( false ),
                 hidden( false ),
-                pingTimeMillis( 0 ) {
+                pingTimeMillis( 0 ),
+                healthMsg( "" ),
+                healthKillFile( false ),
+                healthCheckFailCount( 0 ) {
             }
 
             bool okForSecondaryQueries() const {
-                return ok && secondary && ! hidden;
+                return ok && secondary && ! hidden
+                    && ( healthCheckFailCount < 1 );
             }
 
             /**
@@ -131,6 +135,10 @@ namespace mongo {
 
             int pingTimeMillis;
 
+            // health check
+            string healthMsg;
+            bool healthKillFile;
+            int healthCheckFailCount;
         };
 
         static const double SOCKET_TIMEOUT_SECS;
@@ -282,6 +290,13 @@ namespace mongo {
          */
         bool isAnyNodeOk() const;
 
+        /**
+         * Number of seconds to sleep for a replica status check
+         */
+        static int getSleepSecs();
+
+        static void setSleepSecs( int sleepSecs );
+
     private:
         /**
          * This populates a list of hosts from the list of seeds (discarding the
@@ -405,6 +420,9 @@ namespace mongo {
         int _localThresholdMillis; // local ping latency threshold (protected by _lock)
 
         static int _maxFailedChecks;
+
+        // health check
+        static int _sleepSecs;
     };
 
     /** Use this class to connect to a replica set of servers.  The class will manage

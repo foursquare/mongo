@@ -311,24 +311,8 @@ namespace mongo {
 
             // only step down if there is another node synced to within 10
             // seconds of this node
-            if (!force) {
-                long long int lastOp = (long long int)theReplSet->lastOpTimeWritten.getSecs();
-                long long int closest = (long long int)theReplSet->lastOtherOpTime().getSecs();
-
-                long long int diff = lastOp - closest;
-                result.append("closest", closest);
-                result.append("difference", diff);
-
-                if (diff < 0) {
-                    // not our problem, but we'll wait until thing settle down
-                    errmsg = "someone is ahead of the primary?";
-                    return false;
-                }
-
-                if (diff > 10) {
-                    errmsg = "no secondaries within 10 seconds of my optime";
-                    return false;
-                }
+            if (!force && !theReplSet->isSafeToStepDown(errmsg, result)) {
+                return false;
             }
 
             int secs = (int) cmdObj.firstElement().numberInt();

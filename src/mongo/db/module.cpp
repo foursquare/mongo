@@ -42,15 +42,18 @@ namespace mongo {
         }
     }
 
-    void Module::configAll( boost::program_options::variables_map& params ) {
+    bool Module::configAll( boost::program_options::variables_map& params ) {
         if ( ! _all ) {
-            return;
+            return true;
         }
         for ( list<Module*>::iterator i=_all->begin(); i!=_all->end(); i++ ) {
             Module* m = *i;
-            m->config( params );
+            if ( !m->config( params ) ) {
+                log() << "Failed to configure module " << m->getName() << endl;
+                return false;
+            }
         }
-
+        return true;
     }
 
 

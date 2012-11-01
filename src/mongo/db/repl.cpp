@@ -57,6 +57,7 @@
 #include "mongo/db/server_parameters.h"
 #include "mongo/db/queryutil.h"
 #include "mongo/base/counter.h"
+#include "mongo/db/modules/killfilewatcher.h"
 
 namespace mongo {
 
@@ -161,6 +162,29 @@ namespace mongo {
     bool replAuthenticate(DBClientBase *conn, bool skipAuthCheck);
 
     void appendReplicationInfo(BSONObjBuilder& result, int level) {
+        {
+            BSONObjBuilder health;
+            string msg = "healthy";
+            bool healthy = true;
+
+            bool killFileExists = killFileWatcher.isKilled();
+            if (killFileExists) {
+                healthy = false;
+                string killFileContents = killFileWatcher.contentsOfKillFile();
+                if (killFileContents.size() == 0) {
+                    msg = "kill file is present, forcing unhealthy status";
+                } else {
+                    msg = "kill file is present, forcing unhealthy status: " + killFileContents;
+                }
+            }
+
+            health.append("ok", healthy);
+            health.append("msg", msg);
+            health.append("killFile", killFileExists);
+
+            result.append("healthStatus" , health.obj());
+        }
+
         if ( replSet ) {
             if( theReplSet == 0 || theReplSet->state().shunned() ) {
                 result.append("ismaster", false);

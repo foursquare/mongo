@@ -25,6 +25,7 @@
 #include "../util/net/message.h"
 #include "../util/startup_test.h"
 #include "../client/connpool.h"
+#include "../client/dbclient_rs.h"
 #include "../util/net/message_server.h"
 #include "../util/stringutils.h"
 #include "../util/version.h"
@@ -351,6 +352,7 @@ static void processCommandLineOptions(const std::vector<std::string>& argv) {
     po::options_description sharding_options("Sharding options");
     po::options_description visible_options("Allowed options");
     po::options_description hidden_options("Hidden options");
+    po::options_description healthcheck_options("Health check options");
     po::positional_options_description positional_options;
 
     CmdLine::addGlobalOptions( general_options, hidden_options, ssl_options );
@@ -384,6 +386,11 @@ static void processCommandLineOptions(const std::vector<std::string>& argv) {
 #endif
 
     visible_options.add(sharding_options);
+
+    healthcheck_options.add_options()
+    ( "checkInterval" , po::value<int>() , "in seconds" )
+    ;
+    visible_options.add(healthcheck_options);
 
 #ifdef MONGO_SSL
     visible_options.add(ssl_options);
@@ -476,6 +483,14 @@ static void processCommandLineOptions(const std::vector<std::string>& argv) {
     }
 
     _isUpgradeSwitchSet = params.count("upgrade");
+
+    // set health check options
+    int interval = 10;
+    if ( params.count ( "checkInterval" ) ) {
+        interval = params["checkInterval"].as<int>();
+    }
+    ReplicaSetMonitor::setSleepSecs(interval);
+    out() << "ReplicaSetMonitor checkInterval: " << ReplicaSetMonitor::getSleepSecs() << endl;
 
 #if defined(_WIN32)
     vector<string> disallowedOptions;

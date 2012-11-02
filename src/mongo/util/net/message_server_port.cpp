@@ -29,6 +29,7 @@
 #include "../../db/cmdline.h"
 #include "../../db/lasterror.h"
 #include "../../db/stats/counters.h"
+#include "../../db/stats/top.h"
 #include "mongo/util/concurrency/ticketholder.h"
 
 #ifdef __linux__  // TODO: consider making this ifndef _WIN32
@@ -71,7 +72,6 @@ namespace mongo {
                 while ( ! inShutdown() ) {
                     m.reset();
                     p->psock->clearCounters();
-
                     if ( ! p->recv(m) ) {
                         if( !cmdLine.quiet ){
                             int conns = connTicketHolder.used()-1;
@@ -83,6 +83,11 @@ namespace mongo {
                     }
 
                     handler->process( m , p.get() , le );
+                    if ( ! m.empty() ) {
+                        const char *ns = m.singleData()->_data + 4;
+                        Top::global.netRecvBytes(ns, p->psock->getBytesIn());
+                        Top::global.netSentBytes(ns, p->psock->getBytesOut());
+                    }
                     networkCounter.hit( p->psock->getBytesIn() , p->psock->getBytesOut() );
                 }
             }

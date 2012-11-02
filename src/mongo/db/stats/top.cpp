@@ -34,6 +34,11 @@ namespace mongo {
         count = (newer.count >= older.count) ? (newer.count - older.count) : newer.count;
     }
 
+    Top::IOUsageData::IOUsageData( const IOUsageData& older , const IOUsageData& newer ) {
+        readBytes = (newer.readBytes  >= older.readBytes)   ? (newer.readBytes  - older.readBytes)  : newer.readBytes;
+        writeBytes = (newer.writeBytes >= older.writeBytes) ? (newer.writeBytes - older.writeBytes) : newer.writeBytes;
+    }
+
     Top::CollectionData::CollectionData( const CollectionData& older , const CollectionData& newer )
         : total( older.total , newer.total ) ,
           readLock( older.readLock , newer.readLock ) ,
@@ -43,8 +48,8 @@ namespace mongo {
           insert( older.insert , newer.insert ) ,
           update( older.update , newer.update ) ,
           remove( older.remove , newer.remove ),
-          commands( older.commands , newer.commands ) {
-
+          commands( older.commands , newer.commands ),
+          netio( older.netio, newer.netio) {
     }
 
     void Top::record( const StringData& ns , int op , int lockType , long long micros , bool command ) {
@@ -113,6 +118,18 @@ namespace mongo {
         _lastDropped = ns;
     }
 
+    void Top::netRecvBytes( const string& ns , long long recvBytes ) {
+        SimpleMutex::scoped_lock lk(_lock);
+        CollectionData& coll = _usage[ns];
+        coll.netio.read(recvBytes);
+    }
+
+    void Top::netSentBytes( const string& ns , long long sentBytes ) {
+        SimpleMutex::scoped_lock lk(_lock);
+        CollectionData& coll = _usage[ns];
+        coll.netio.write(sentBytes);
+    }
+
     void Top::cloneMap(Top::UsageMap& out) const {
         SimpleMutex::scoped_lock lk(_lock);
         out = _usage;
@@ -150,6 +167,8 @@ namespace mongo {
             _appendStatsEntry( b , "remove" , coll.remove );
             _appendStatsEntry( b , "commands" , coll.commands );
 
+            _appendNetStatsEntry( b , coll.netio);
+
             bb.done();
         }
     }
@@ -158,6 +177,13 @@ namespace mongo {
         BSONObjBuilder bb( b.subobjStart( statsName ) );
         bb.appendNumber( "time" , map.time );
         bb.appendNumber( "count" , map.count );
+        bb.done();
+    }
+
+    void Top::_appendNetStatsEntry( BSONObjBuilder& b , const IOUsageData& map ) const {
+        BSONObjBuilder bb( b.subobjStart( "netio" ) );
+        bb.appendNumber( "recvBytes" , map.readBytes );
+        bb.appendNumber( "sentBytes" , map.writeBytes );
         bb.done();
     }
 

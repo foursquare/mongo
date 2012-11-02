@@ -43,6 +43,20 @@ namespace mongo {
             }
         };
 
+        struct IOUsageData {
+            IOUsageData() : readBytes(0) , writeBytes(0) {}
+            IOUsageData( const IOUsageData& older , const IOUsageData& newer );
+            long long readBytes;
+            long long writeBytes;
+
+            void read( long long r ) {
+                readBytes += r;
+            }
+            void write( long long w ) {
+                writeBytes += w;
+            }
+        };
+
         struct CollectionData {
             /**
              * constructs a diff
@@ -61,6 +75,8 @@ namespace mongo {
             UsageData update;
             UsageData remove;
             UsageData commands;
+            IOUsageData diskio;
+            IOUsageData netio;
         };
 
         typedef StringMap<CollectionData> UsageMap;
@@ -71,6 +87,8 @@ namespace mongo {
         void cloneMap(UsageMap& out) const;
         CollectionData getGlobalData() const { return _global; }
         void collectionDropped( const string& ns );
+        void netRecvBytes( const string& ns , long long recvBytes );
+        void netSentBytes( const string& ns , long long sentBytes );
 
     public: // static stuff
         static Top global;
@@ -78,6 +96,7 @@ namespace mongo {
     private:
         void _appendToUsageMap( BSONObjBuilder& b , const UsageMap& map ) const;
         void _appendStatsEntry( BSONObjBuilder& b , const char * statsName , const UsageData& map ) const;
+        void _appendNetStatsEntry( BSONObjBuilder& b , const IOUsageData& map ) const;
         void _record( CollectionData& c , int op , int lockType , long long micros , bool command );
 
         mutable SimpleMutex _lock;

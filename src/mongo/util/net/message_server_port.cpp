@@ -29,6 +29,7 @@
 #include "../../db/cmdline.h"
 #include "../../db/lasterror.h"
 #include "../../db/stats/counters.h"
+#include "../../db/stats/top.h"
 #include "mongo/util/concurrency/ticketholder.h"
 #include "mongo/util/net/ssl_manager.h"
 
@@ -204,6 +205,11 @@ namespace mongo {
                     }
 
                     handler->process( m , p.get() , le );
+                    if ( ! m.empty() ) {
+                        const char *ns = m.singleData()->_data + 4;
+                        Top::global.netRecvBytes(ns, p->psock->getBytesIn());
+                        Top::global.netSentBytes(ns, p->psock->getBytesOut());
+                    }
                     networkCounter.hit( p->psock->getBytesIn() , p->psock->getBytesOut() );
                 }
             }

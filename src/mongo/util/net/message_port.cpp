@@ -39,6 +39,9 @@
 # include <sys/stat.h>
 #endif
 
+#include "mongo/db/dbmessage.h"
+#include "mongo/util/stacktrace.h"
+
 namespace mongo {
 
 
@@ -250,6 +253,21 @@ again:
         mmm( log() << "*  say()  thr:" << GetCurrentThreadId() << endl; )
         toSend.header()->id = nextMessageId();
         toSend.header()->responseTo = responseTo;
+
+        if (cmdLine.traceNetwork && (toSend.operation() == dbUpdate ||
+                toSend.operation() == dbInsert ||
+                toSend.operation() == dbDelete)) {
+            DbMessage dbMsg(toSend);
+            log() << "say: ns: " << dbMsg.getns()
+                    << ", flags: " << dbMsg.pullInt()
+                    << ", to: " << _remoteParsed.toString(true)
+                    << ", reserved: " << dbMsg.reservedField() << endl;
+
+            if (dbMsg.reservedField() & Reserved_FromWriteback) {
+                warning() << "Sending message with writeback bit set! (only valid from wbl)" << endl;
+                printStackTrace();
+            }
+        }
 
         if ( piggyBackData && piggyBackData->len() ) {
             mmm( log() << "*     have piggy back" << endl; )

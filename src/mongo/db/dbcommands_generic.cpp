@@ -255,6 +255,12 @@ namespace mongo {
                 s++;
             }
 
+            if (cmdObj.hasElement("traceNetwork")) {
+                if (s == 0) result.append("was", cmdLine.traceNetwork);
+                cmdLine.traceNetwork = cmdObj["traceNetwork"].trueValue();
+                s++;
+            }
+
             if( s == 0 && !found ) {
                 errmsg = "no option found to set, use help:true to see options ";
                 return false;

@@ -429,8 +429,17 @@ namespace mongo {
             if( d.reservedField() & Reserved_InsertOption_ContinueOnError )
                 flags |= InsertOption_ContinueOnError;
 
-            if( d.reservedField() & Reserved_FromWriteback )
+            if((d.reservedField() & Reserved_FromWriteback) ||
+                    (flags & WriteOption_FromWriteback)) {
+                warning() << "WB bit is set in insert, flags: " << flags
+                        << ", reserved: " << d.reservedField()
+                        << ", logging first one: "
+                        << insertsRemaining.front() << endl;
+            }
+
+            if( d.reservedField() & Reserved_FromWriteback ) {
                 flags |= WriteOption_FromWriteback;
+            }
 
             _insert( ns, insertsRemaining, flags, r, d );
         }
@@ -775,6 +784,14 @@ namespace mongo {
 
             const BSONObj toUpdate = d.nextJsObj();
 
+            if((d.reservedField() & Reserved_FromWriteback) ||
+                    (flags & WriteOption_FromWriteback)) {
+                warning() << "writeback bit set on update: flags: " << flags
+                        << ", reserved: " << d.reservedField()
+                        << ", query: " << query
+                        << ", update: " << toUpdate << endl;
+            }
+
             if( d.reservedField() & Reserved_FromWriteback ){
                 flags |= WriteOption_FromWriteback;
             }
@@ -930,6 +947,13 @@ namespace mongo {
             uassert( 10203 ,  "bad delete message" , d.moreJSObjs() );
 
             const BSONObj query = d.nextJsObj();
+
+            if((d.reservedField() & Reserved_FromWriteback) ||
+                    (flags & WriteOption_FromWriteback)) {
+                warning() << "writeback bit set on delete: flags: " << flags
+                        << ", reserved: " << d.reservedField()
+                        << ", query: " << query << endl;
+            }
 
             if( d.reservedField() & Reserved_FromWriteback ){
                 flags |= WriteOption_FromWriteback;

@@ -381,6 +381,9 @@ namespace mongo {
                     {
                         scoped_lock lk( _seenWritebacksLock );
                         WBStatus& s = _seenWritebacks[cid];
+
+                        log() << "GetLastError being set to seenWritebacks: " << gle << endl;
+
                         s.id = wid;
                         s.gle = gle;
                     }

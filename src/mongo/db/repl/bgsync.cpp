@@ -309,6 +309,8 @@ namespace replset {
                     break;
 
                 BSONObj o = r.nextSafe().getOwned();
+                const OpTime ts = o["ts"]._opTime();
+                logTsWindow( ts ) << "received oplog event: " << o << endl;
 
                 Timer timer;
                 // the blocking queue will wait (forever) until there's room for us to push

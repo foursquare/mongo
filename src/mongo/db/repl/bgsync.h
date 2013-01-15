@@ -24,6 +24,13 @@
 #include "mongo/db/jsobj.h"
 
 namespace mongo {
+    // log a consistent 10% of messages
+    inline Nullstream& logTsWindow( const OpTime& ot, long long hash ) {
+        if ( logLevel > 0 && hash % 10 == 0 )
+            return log(1) << "OplogEvent [" << mongo::curTimeMillis64() << "] Timestamp(" << ot.getSecs() << "," << ot.getInc() << ") " << hash;
+        return nullstream;
+    }
+
 namespace replset {
 
     // This interface exists to facilitate easier testing;

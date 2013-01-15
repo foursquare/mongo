@@ -220,6 +220,7 @@ namespace mongo {
         }
 
         append_O_Obj(r->data(), partial, obj);
+        logTsWindow( ts , hashNew ) << " logged" << endl;
 
         if ( logLevel >= 6 ) {
             log( 6 ) << "logOp:" << BSONObj::make(r) << endl;

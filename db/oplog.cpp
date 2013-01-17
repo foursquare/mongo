@@ -190,6 +190,10 @@ namespace mongo {
         }
 
         append_O_Obj(r->data, partial, obj);
+        if ( logLevel > 0 ) {
+            BSONObj temp(r);
+            logTsWindow( ts ) << "logged oplog event: " << temp << endl;
+        }
 
         if ( logLevel >= 6 ) {
             BSONObj temp(r);

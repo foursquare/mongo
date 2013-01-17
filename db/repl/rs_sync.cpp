@@ -388,6 +388,7 @@ namespace mongo {
                     break;
                 {
                     BSONObj o = r.nextSafe(); /* note we might get "not master" at some point */
+                    logTsWindow(o["ts"]._opTime()) << "received oplog event: " << o << endl;
 
                     int sd = myConfig().slaveDelay;
                     // ignore slaveDelay if the box is still initializing. once
@@ -437,6 +438,7 @@ namespace mongo {
 
                         syncApply(o);
                         _logOpObjRS(o);   // with repl sets we write the ops to our oplog too
+                        logTsWindow(o["ts"]._opTime()) << "applied oplog event: " << o << endl;
                     }
                     catch (DBException& e) {
                         sethbmsg(str::stream() << "syncTail: " << e.toString() << ", syncing: " << o);

@@ -39,6 +39,13 @@
 
 namespace mongo {
 
+    // log a upToSecs window of oplog events every minute
+    inline Nullstream& logTsWindow( const OpTime& ot, unsigned int upToSecs = 2 ) {
+        if ( logLevel > 0 && ot.getSecs() % 60 < upToSecs )
+            return log(1) << "[" << mongo::curTimeMillis64() << "] ";
+        return nullstream;
+    }
+
     /* replication slave? (possibly with slave)
        --slave cmd line setting -> SimpleSlave
     */

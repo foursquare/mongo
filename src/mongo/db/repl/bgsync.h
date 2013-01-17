@@ -26,7 +26,7 @@
 namespace mongo {
     // log a upToSecs window of oplog events every minute
     inline Nullstream& logTsWindow( const OpTime& ot, unsigned int upToSecs = 2 ) {
-        if ( ot.getSecs() % 60 < upToSecs )
+        if ( logLevel > 0 && ot.getSecs() % 60 < upToSecs )
             return log(1) << "[" << mongo::curTimeMillis64() << "] ";
         return nullstream;
     }

@@ -415,7 +415,8 @@ namespace replset {
             theReplSet->setMinValid(lastOp);
 
             multiApply(ops.getDeque(), multiSyncApply);
-
+            const OpTime ts = lastOp["ts"]._opTime();
+            logTsWindow(ts) << "applied oplog event: " << lastOp << endl;
             applyOpsToOplog(&ops.getDeque());
         }
     }

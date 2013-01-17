@@ -185,8 +185,8 @@ namespace mongo {
                     return false;
                 }
 
+
                 res = res.getOwned();
-                LOG(5) << "gle result was " << res << endl;
                 conn.done();
             }
 
@@ -206,9 +206,7 @@ namespace mongo {
                 try {
                     ShardConnection conn( temp , "" );
                     ON_BLOCK_EXIT_OBJ( conn, &ShardConnection::done );
-                    BSONObj gle(conn->getLastErrorDetailed());
-                    LOG(5) << "gle result was " << gle << endl;
-                    _addWriteBack( writebacks , gle );
+                    _addWriteBack( writebacks , conn->getLastErrorDetailed() );
 
                 }
                 catch( std::exception &e ){
@@ -245,7 +243,6 @@ namespace mongo {
                 result.appendElements( res );
             }
 
-            LOG(5) << "single shard GLE result: " << result.asTempObj() << endl;
             return ok;
         }
 
@@ -345,7 +342,6 @@ namespace mongo {
         if ( errors.size() == 0 ) {
             result.appendNull( "err" );
             _handleWriteBacks( writebacks , fromWriteBackListener );
-            LOG(5) << "No error GLE result: " << result.asTempObj() << endl;
             return true;
         }
 
@@ -370,7 +366,6 @@ namespace mongo {
         }
 
         _handleWriteBacks( writebacks , fromWriteBackListener );
-        LOG(5) << "GLE result with error: " << result.asTempObj() << endl;
         return true;
     }
 

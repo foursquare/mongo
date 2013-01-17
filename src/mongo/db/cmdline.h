@@ -131,7 +131,6 @@ namespace mongo {
 
         SSLManager* sslServerManager; // currently leaks on close
 #endif
-        bool traceNetwork;     // trace network messages
         
         static void launchOk();
 
@@ -163,7 +162,7 @@ namespace mongo {
         configsvr(false), quota(false), quotaFiles(8), cpu(false),
         durOptions(0), objcheck(false), oplogSize(0), defaultProfile(0),
         slowMS(100), defaultLocalThresholdMillis(15), pretouch(0), moveParanoia( true ),
-        syncdelay(60), noUnixSocket(false), doFork(0), socket("/tmp") , traceNetwork(0)
+        syncdelay(60), noUnixSocket(false), doFork(0), socket("/tmp") 
     {
         started = time(0);
 

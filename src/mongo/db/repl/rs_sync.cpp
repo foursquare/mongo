@@ -416,7 +416,8 @@ namespace replset {
 
             multiApply(ops.getDeque(), multiSyncApply);
             const OpTime ts = lastOp["ts"]._opTime();
-            logTsWindow(ts) << "applied oplog event: " << lastOp << endl;
+            long long opHash = lastOp["h"].numberLong();
+            logTsWindow( ts, opHash ) << " applied" << endl;
             applyOpsToOplog(&ops.getDeque());
         }
     }

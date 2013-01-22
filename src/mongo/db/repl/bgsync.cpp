@@ -310,7 +310,9 @@ namespace replset {
 
                 BSONObj o = r.nextSafe().getOwned();
                 const OpTime ts = o["ts"]._opTime();
-                logTsWindow( ts ) << "received oplog event: " << o << endl;
+                long long opHash = o["h"].numberLong();
+
+                logTsWindow( ts, opHash ) << " received" << endl;
 
                 Timer timer;
                 // the blocking queue will wait (forever) until there's room for us to push
@@ -325,8 +327,8 @@ namespace replset {
                     // update counters
                     _queueCounter.waitTime += timer.millis();
                     _queueCounter.numElems++;
-                    _lastH = o["h"].numberLong();
-                    _lastOpTimeFetched = o["ts"]._opTime();
+                    _lastH = opHash;
+                    _lastOpTimeFetched = ts;
                 }
             } // end while
 

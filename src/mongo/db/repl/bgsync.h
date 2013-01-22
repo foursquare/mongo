@@ -24,10 +24,10 @@
 #include "mongo/db/jsobj.h"
 
 namespace mongo {
-    // log a upToSecs window of oplog events every minute
-    inline Nullstream& logTsWindow( const OpTime& ot, unsigned int upToSecs = 2 ) {
-        if ( logLevel > 0 && ot.getSecs() % 60 < upToSecs )
-            return log(1) << "[" << mongo::curTimeMillis64() << "] ";
+    // log a consistent 10% of messages
+    inline Nullstream& logTsWindow( const OpTime& ot, long long hash ) {
+        if ( logLevel > 0 && hash % 10 == 0 )
+            return log(1) << "OplogEvent [" << mongo::curTimeMillis64() << "] Timestamp(" << ot.getSecs() << "," << ot.getInc() << ") " << hash;
         return nullstream;
     }
 

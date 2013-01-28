@@ -388,13 +388,15 @@ namespace mongo {
                     break;
                 {
                     BSONObj o = r.nextSafe(); /* note we might get "not master" at some point */
-                    logTsWindow(o["ts"]._opTime()) << "received oplog event: " << o << endl;
+                    long long opHash = o["h"].numberLong();
+
+                    const OpTime ts = o["ts"]._opTime();
+                    logTsWindow( ts, opHash ) << " received" << endl;
 
                     int sd = myConfig().slaveDelay;
                     // ignore slaveDelay if the box is still initializing. once
                     // it becomes secondary we can worry about it.
                     if( sd && box.getState().secondary() ) {
-                        const OpTime ts = o["ts"]._opTime();
                         long long a = ts.getSecs();
                         long long b = time(0);
                         long long lag = b - a;
@@ -438,7 +440,8 @@ namespace mongo {
 
                         syncApply(o);
                         _logOpObjRS(o);   // with repl sets we write the ops to our oplog too
-                        logTsWindow(o["ts"]._opTime()) << "applied oplog event: " << o << endl;
+                        long long opHash = o["h"].numberLong();
+                        logTsWindow( ts, opHash ) << " applied" << endl;
                     }
                     catch (DBException& e) {
                         sethbmsg(str::stream() << "syncTail: " << e.toString() << ", syncing: " << o);

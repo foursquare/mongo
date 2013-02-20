@@ -673,7 +673,12 @@ namespace mongo {
             if( cmdLine.dur ) {
                 result.append("dur", dur::stats.asObj());
             }
-            
+
+            // HACK(leo): turn off recordStats only if explicitly setting {recordStats : 0}.
+            // killfile patch calls this, and it would otherwise block on the following section while 
+            // indexing during resyncs. (https://jira.mongodb.org/browse/CS-6141)
+            BSONElement e = cmdObj["recordStats"];
+            if ( e.eoo() || (e.type() && e.trueValue()) )
             {
                 BSONObjBuilder record( result.subobjStart( "recordStats" ) );
                 Record::appendStats( record );

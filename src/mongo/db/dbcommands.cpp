@@ -678,7 +678,7 @@ namespace mongo {
             // killfile patch calls this, and it would otherwise block on the following section while 
             // indexing during resyncs. (https://jira.mongodb.org/browse/CS-6141)
             BSONElement e = cmdObj["recordStats"];
-            if ( e.eoo() || (e.type() && e.trueValue()) )
+            if ( !e.type() || e.trueValue() )
             {
                 BSONObjBuilder record( result.subobjStart( "recordStats" ) );
                 Record::appendStats( record );

@@ -28,6 +28,35 @@ namespace mongo {
 
     DBConnectionPool shardConnectionPool;
 
+    class ClientConnections;
+
+    class ClientConnectionsHolder : public Command {
+    public:
+        ClientConnectionsHolder()
+            : Command( "clientConnectionsInfo_temp" ), _mutex( "ClientConnectionsHolder" ) {
+        }
+
+        virtual LockType locktype() const { return NONE; }
+        virtual bool slaveOk() const { return true; }
+
+        void add( const ClientConnections* cc ) {
+            scoped_lock lock( _mutex );
+            _clientConnections.insert( cc );
+        }
+
+        void remove( const ClientConnections* cc ) {
+            scoped_lock lock( _mutex );
+            _clientConnections.erase( cc );
+        }
+
+        virtual bool run(const string& db, BSONObj& cmdObj, int options, string& errmsg,
+                         BSONObjBuilder& result, bool fromRepl = false );
+
+    private:
+        mongo::mutex _mutex;
+        set<const ClientConnections*> _clientConnections;
+    } clientConnectionsHolder;
+
     /**
      * holds all the actual db connections for a client to various servers
      * 1 per thread, so doesn't have to be thread safe
@@ -42,9 +71,13 @@ namespace mongo {
         };
 
 
-        ClientConnections() {}
+        ClientConnections() {
+            clientConnectionsHolder.add( this );
+        }
 
         ~ClientConnections() {
+            clientConnectionsHolder.remove( this );
+
             for ( HostMap::iterator i=_hosts.begin(); i!=_hosts.end(); ++i ) {
                 string addr = i->first;
                 Status* ss = i->second;
@@ -65,12 +98,18 @@ namespace mongo {
             _hosts.clear();
         }
 
+        Status* _getStatus( const string& addr ) {
+            scoped_spinlock lock( _lock );
+            Status* &temp = _hosts[addr];
+            if ( ! temp )
+                temp = new Status();
+            return temp;
+        }
+
         DBClientBase * get( const string& addr , const string& ns ) {
             _check( ns );
 
-            Status* &s = _hosts[addr];
-            if ( ! s )
-                s = new Status();
+            Status* s = _getStatus( addr );
 
             auto_ptr<DBClientBase> c; // Handles cleanup if there's an exception thrown
             if ( s->avail ) {
@@ -117,11 +156,7 @@ namespace mongo {
             for ( unsigned i=0; i<all.size(); i++ ) {
 
                 string sconnString = all[i].getConnString();
-                Status* &s = _hosts[sconnString];
-
-                if ( ! s ){
-                    s = new Status();
-                }
+                Status* s = _getStatus( sconnString );
 
                 if( ! s->avail )
                     s->avail = shardConnectionPool.get( sconnString );
@@ -142,8 +177,24 @@ namespace mongo {
             _seenNS.insert( ns );
             checkVersions( ns );
         }
-        
+
+        void appendInfo( BSONObjBuilder& b ) const {
+            scoped_spinlock lock( _lock );
+            BSONArrayBuilder arr( b.subarrayStart( "hosts" ) );
+            for ( HostMap::const_iterator i = _hosts.begin(); i != _hosts.end(); ++i ) {
+                BSONObjBuilder bb( arr.subobjStart() );
+                bb.append( "host", i->first );
+                bb.append( "created", i->second->created );
+                bb.appendBool( "avail", static_cast<bool>( i->second->avail ) );
+                bb.done();
+            }
+            arr.done();
+            b.appendNumber( "seenNSNumber", _seenNS.size() );
+        }
+
         typedef map<string,Status*,DBConnectionPool::serverNameCompare> HostMap;
+
+        mutable SpinLock _lock;
         HostMap _hosts;
         set<string> _seenNS;
         // -----
@@ -161,6 +212,24 @@ namespace mongo {
     };
 
     thread_specific_ptr<ClientConnections> ClientConnections::_perThread;
+
+    bool ClientConnectionsHolder::run(const string& db, BSONObj& cmdObj, int options, string& errmsg,
+                                      BSONObjBuilder& result, bool fromRepl ) {
+
+        BSONArrayBuilder arr( 64 * 1024 );
+        {
+            scoped_lock lock( _mutex );
+            for ( set<const ClientConnections*>::const_iterator i = _clientConnections.begin();
+                  i != _clientConnections.end();
+                  ++i ) {
+                BSONObjBuilder b( arr.subobjStart() );
+                (*i)->appendInfo( b );
+                b.done();
+            }
+        }
+        result.appendArray( "threads", arr.obj() );
+        return true;
+    }
 
     ShardConnection::ShardConnection( const Shard * s , const string& ns, ChunkManagerPtr manager )
         : _addr( s->getConnString() ) , _ns( ns ), _manager( manager ) {

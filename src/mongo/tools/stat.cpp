@@ -150,10 +150,10 @@ namespace mongo {
             }
 
             string sort = getParam( "sort" );
-            if ( sort == "set" ) {
-              _sortFunc = &mongo::Stat::sortBySet;
-            } else {
+            if ( sort == "host" ) {
               _sortFunc = &mongo::Stat::sortByHost;
+            } else {
+              _sortFunc = &mongo::Stat::sortBySet;
             }
         }
 

@@ -51,6 +51,7 @@ namespace mongo {
             ("http", "use http instead of raw db connection")
             ("discover" , "discover nodes and display stats for all" )
             ("all" , "all optional fields" )
+            ("sort" , po::value<string>()->default_value("repl"), "sort output by <repl|host>" )
             ;
 
             addPositionArg( "sleep" , 1 );
@@ -146,6 +147,13 @@ namespace mongo {
 
             if ( hasParam( "discover" ) ) {
                 _many = true;
+            }
+
+            string sort = getParam( "sort" );
+            if ( sort == "repl" ) {
+              _sortFunc = &mongo::Stat::sortByRepl;
+            } else {
+              _sortFunc = &mongo::Stat::sortByHost;
             }
         }
 
@@ -530,6 +538,9 @@ namespace mongo {
                     printHeaders( biggest );
                 }
 
+                //    sort
+                std::sort( rows.begin(), rows.end(), boost::bind( _sortFunc, this, _1, _2 ));
+
                 //    rows
                 for ( unsigned i=0; i<rows.size(); i++ ) {
                     cout << setw( longestHost ) << rows[i].host << "\t";
@@ -568,6 +579,17 @@ namespace mongo {
             string err;
             BSONObj data;
         };
+
+        bool (mongo::Stat::*_sortFunc)( const Row&, const Row& );
+        bool sortByRepl( const Row& a, const Row& b ) {
+            if ( !a.data["set"].eoo() && !b.data["set"].eoo() ) {
+                return a.data["set"]["data"] < b.data["set"]["data"];
+            }
+            return sortByHost( a, b.host );
+        }
+        bool sortByHost( const Row& a, const Row& b ) {
+            return a.host < b.host;
+        }
     };
 
 }

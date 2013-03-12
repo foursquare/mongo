@@ -51,7 +51,7 @@ namespace mongo {
             ("http", "use http instead of raw db connection")
             ("discover" , "discover nodes and display stats for all" )
             ("all" , "all optional fields" )
-            ("sort" , po::value<string>()->default_value("repl"), "sort output by <repl|host>" )
+            ("sort" , po::value<string>()->default_value("set"), "sort output by <set|host>" )
             ;
 
             addPositionArg( "sleep" , 1 );
@@ -150,8 +150,8 @@ namespace mongo {
             }
 
             string sort = getParam( "sort" );
-            if ( sort == "repl" ) {
-              _sortFunc = &mongo::Stat::sortByRepl;
+            if ( sort == "set" ) {
+              _sortFunc = &mongo::Stat::sortBySet;
             } else {
               _sortFunc = &mongo::Stat::sortByHost;
             }
@@ -581,9 +581,12 @@ namespace mongo {
         };
 
         bool (mongo::Stat::*_sortFunc)( const Row&, const Row& );
-        bool sortByRepl( const Row& a, const Row& b ) {
+        bool sortBySet( const Row& a, const Row& b ) {
             if ( !a.data["set"].eoo() && !b.data["set"].eoo() ) {
-                return a.data["set"]["data"] < b.data["set"]["data"];
+                if ( a.data["set"]["data"] < b.data["set"]["data"] ) {
+                    return true;
+                }
+                return a.data["repl"]["data"] < b.data["repl"]["data"];
             }
             return sortByHost( a, b.host );
         }

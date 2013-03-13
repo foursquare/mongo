@@ -583,12 +583,18 @@ namespace mongo {
         bool (mongo::Stat::*_sortFunc)( const Row&, const Row& );
         bool sortBySet( const Row& a, const Row& b ) {
             if ( !a.data["set"].eoo() && !b.data["set"].eoo() ) {
-                if ( a.data["set"]["data"] < b.data["set"]["data"] ) {
-                    return true;
+                {
+                    string aSet = a.data["set"]["data"].str();
+                    string bSet = b.data["set"]["data"].str();
+                    if ( aSet < bSet ) {
+                        return true;
+                    }
                 }
-                return a.data["repl"]["data"] < b.data["repl"]["data"];
+                string aRepl = a.data["repl"]["data"].str();
+                string bRepl = b.data["repl"]["data"].str();
+                return aRepl < bRepl;
             }
-            return sortByHost( a, b.host );
+            return sortByHost( a, b );
         }
         bool sortByHost( const Row& a, const Row& b ) {
             return a.host < b.host;

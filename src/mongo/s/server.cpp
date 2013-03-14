@@ -23,7 +23,6 @@
 #include "../util/net/message.h"
 #include "../util/startup_test.h"
 #include "../client/connpool.h"
-#include "../client/dbclient_rs.h"
 #include "../util/net/message_server.h"
 #include "../util/stringutils.h"
 #include "../util/version.h"
@@ -68,6 +67,7 @@ namespace mongo {
     static bool scriptingEnabled = true;
     static bool noHttpInterface = false;
     static vector<string> configdbs;
+    extern bool releaseConnectionsAfterResponse;
 
     bool inShutdown() {
         return dbexitCalled;
@@ -103,9 +103,14 @@ namespace mongo {
             try {
                 r.init();
                 r.process();
+                if ( releaseConnectionsAfterResponse && r.expectResponse() ) {
+                    LOG(2) << "release thread local connections back to pool" << endl;
+                    ShardConnection::releaseMyConnections();
+                }
+
             }
             catch ( AssertionException & e ) {
-                log( e.isUserAssertion() ? 1 : 0 ) << "AssertionException while processing op type : " << m.operation() << " to : " << r.getns() << causedBy(e) << endl;
+                LOG( e.isUserAssertion() ? 1 : 0 ) << "AssertionException while processing op type : " << m.operation() << " to : " << r.getns() << causedBy(e) << endl;
 
                 le->raiseError( e.getCode() , e.what() );
 

@@ -284,6 +284,8 @@ namespace mongo {
         /** checks all of my thread local connections for the version of this ns */
         static void checkMyConnectionVersions( const string & ns );
 
+        static void releaseMyConnections();
+
     private:
         void _init();
         void _finishInit();

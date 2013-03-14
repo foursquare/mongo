@@ -39,9 +39,13 @@
 #include "client_info.h"
 
 namespace mongo {
+    bool releaseConnectionsAfterResponse = false;
 
     bool setParmsMongodSpecific(const string& dbname, BSONObj& cmdObj, string& errmsg, BSONObjBuilder& result, bool fromRepl )
-    { 
+    {
+        if ( cmdObj["releaseConnectionsAfterResponse"].type() == Bool ) {
+            releaseConnectionsAfterResponse = cmdObj["releaseConnectionsAfterResponse"].trueValue();
+        }
         return true;
     }
 

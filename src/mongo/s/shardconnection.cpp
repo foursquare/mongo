@@ -77,6 +77,10 @@ namespace mongo {
 
         ~ClientConnections() {
             clientConnectionsHolder.remove( this );
+            releaseAll( true );
+        }
+
+        void releaseAll( bool fromDestructor = false ) {
 
             for ( HostMap::iterator i=_hosts.begin(); i!=_hosts.end(); ++i ) {
                 string addr = i->first;
@@ -93,9 +97,11 @@ namespace mongo {
                         release( addr , ss->avail );
                     ss->avail = 0;
                 }
-                delete ss;
+                if ( fromDestructor )
+                    delete ss;
             }
-            _hosts.clear();
+            if ( fromDestructor )
+                _hosts.clear();
         }
 
         Status* _getStatus( const string& addr ) {
@@ -319,4 +325,9 @@ namespace mongo {
             kill();
         }
     }
+
+    void ShardConnection::releaseMyConnections() {
+        ClientConnections::threadInstance()->releaseAll();
+    }
+
 }

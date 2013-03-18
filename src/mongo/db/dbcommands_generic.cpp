@@ -126,6 +126,8 @@ namespace mongo {
 
     const char* fetchReplIndexPrefetchParam();
 
+    bool fetchReleaseConnectionsAfterResponse();
+
     class CmdGet : public Command {
     public:
         CmdGet() : Command( "getParameter" ) { }
@@ -139,6 +141,7 @@ namespace mongo {
             help << "  quiet\n";
             help << "  notablescan\n";
             help << "  logLevel\n";
+            help << "  releaseConnectionsAfterResponse\n";
             help << "  syncdelay\n";
             help << "{ getParameter:'*' } to get everything\n";
         }
@@ -158,6 +161,9 @@ namespace mongo {
             }
             if( all || cmdObj.hasElement("syncdelay") ) {
                 result.append("syncdelay", cmdLine.syncdelay);
+            }
+            if( all || cmdObj.hasElement("releaseConnectionsAfterResponse") ) {
+                result.append("releaseConnectionsAfterResponse", fetchReleaseConnectionsAfterResponse());
             }
             if( all || cmdObj.hasElement("replApplyBatchSize") ) {
                 result.append("replApplyBatchSize", replApplyBatchSize);

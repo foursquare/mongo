@@ -92,6 +92,10 @@ namespace mongo {
         return false;
     }
 
+    bool fetchReleaseConnectionsAfterResponse() {
+        return false;
+    }
+
     const char* fetchReplIndexPrefetchParam() {
         if (!theReplSet) return "uninitialized";
         ReplSetImpl::IndexPrefetchConfig ip = theReplSet->getIndexPrefetchConfig();

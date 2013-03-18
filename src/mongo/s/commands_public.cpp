@@ -39,6 +39,11 @@
 #include "client_info.h"
 
 namespace mongo {
+    bool releaseConnectionsAfterResponse = true;
+
+    bool fetchReleaseConnectionsAfterResponse() {
+        return releaseConnectionsAfterResponse;
+    }
 
     bool setParmsMongodSpecific(const string& dbname, BSONObj& cmdObj, string& errmsg, BSONObjBuilder& result, bool fromRepl )
     { 

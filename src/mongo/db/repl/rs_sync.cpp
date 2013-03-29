@@ -191,6 +191,7 @@ namespace replset {
     // Doles out all the work to the writer pool threads and waits for them to complete
     void SyncTail::applyOps(const std::vector< std::vector<BSONObj> >& writerVectors, 
                                      MultiSyncApplyFunc applyFunc) {
+        Timer timer;
         ThreadPool& writerPool = theReplSet->getWriterPool();
         for (std::vector< std::vector<BSONObj> >::const_iterator it = writerVectors.begin();
              it != writerVectors.end();
@@ -199,6 +200,7 @@ namespace replset {
                 writerPool.schedule(applyFunc, boost::cref(*it), this);
             }
         }
+        LOG(1) << "replication apply ops took " << timer.millis() << "ms" << endl;
         writerPool.join();
     }
 

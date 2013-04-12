@@ -69,8 +69,9 @@ namespace mongo {
             }
 
             bool okForSecondaryQueries() const {
+                // a secondary with queue > 500 is not ok
                 return ok && secondary && ! hidden
-                    && ( healthCheckFailCount < 1 );
+                    && ( healthCheckFailCount < 1 ) && queueTotal < 500;
             }
 
             /**
@@ -139,6 +140,7 @@ namespace mongo {
             string healthMsg;
             bool healthKillFile;
             int healthCheckFailCount;
+            int queueTotal;
         };
 
         /**

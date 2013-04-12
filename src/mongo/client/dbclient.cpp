@@ -28,6 +28,7 @@
 #include "mongo/db/namespacestring.h"
 #include "mongo/s/util.h"
 #include "mongo/util/md5.hpp"
+ #include "../util/timer.h"
 
 #ifdef MONGO_SSL
 // TODO: Remove references to cmdline from the client.
@@ -1190,7 +1191,13 @@ namespace mongo {
     }
 
     bool DBClientConnection::recv( Message &m ) {
-        return port().recv(m);
+        Timer t;
+        bool result = port().recv(m);
+        int elapsed = t.millis();
+        if ( elapsed >= 1000 ) {
+            log() << "DBClientConnection::recv on " << getServerAddress() << " took " << elapsed << " ms" << endl;
+        }
+        return result;
     }
 
     bool DBClientConnection::call( Message &toSend, Message &response, bool assertOk , string * actualServer ) {

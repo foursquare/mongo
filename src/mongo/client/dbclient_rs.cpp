@@ -73,6 +73,9 @@ namespace mongo {
             }
         }
 
+        // start with a very big number
+        int minQueueTotal = 1<<30;
+
         for (size_t itNode = 0; itNode < nodes.size(); ++itNode) {
             nextNodeIndex = (nextNodeIndex + 1) % nodes.size();
             const ReplicaSetMonitor::Node& node = nodes[nextNodeIndex];
@@ -88,11 +91,13 @@ namespace mongo {
 
             if (node.matchesTag(readPreferenceTag)) {
                 // found an ok candidate; may not be local.
-                fallbackHost = node.addr;
-                *isPrimarySelected = node.ismaster;
-
-                if (node.isLocalSecondary(localThresholdMillis)) {
-                    // found a local node.  return early.
+                if (node.queueTotal < minQueueTotal) {
+                    fallbackHost = node.addr;
+                    *isPrimarySelected = node.ismaster;
+                    minQueueTotal = node.queueTotal;
+                }
+                if (node.isLocalSecondary(localThresholdMillis) && node.queueTotal == 0) {
+                    // found a local node with no queueing.  return early.
                     log(2) << "dbclient_rs getSlave found local secondary for queries: "
                            << nextNodeIndex << ", ping time: " << node.pingTimeMillis << endl;
                     *lastHost = fallbackHost;
@@ -767,6 +772,16 @@ namespace mongo {
                     node.healthMsg = healthStatus["msg"].String();
                     node.healthKillFile = healthStatus["killFile"].trueValue();
                 }
+
+                // keep track of queue sizes
+                if ( (o.hasField("globalLock") && o["globalLock"].type() == Object) ) {
+                    BSONObj globalLock = o["globalLock"].embeddedObject();
+                    node.queueTotal = globalLock["currentQueue"].embeddedObject()["total"].numberInt();
+                    if (node.queueTotal > 0) {
+                        log() << "ReplicaSetMonitor::_checkConnection: queueTotal of " << node.queueTotal
+                              << " on " << conn->getServerAddress() << endl;
+                    }
+                }
             }
 
             log( ! verbose ) << "ReplicaSetMonitor::_checkConnection: " << conn->toString()
@@ -1048,7 +1063,6 @@ namespace mongo {
                                                       bool* isPrimarySelected) {
 
         HostAndPort candidate;
-
         {
             scoped_lock lk(_lock);
             candidate = ReplicaSetMonitor::selectNode(_nodes, preference, tags,
@@ -1254,9 +1268,11 @@ namespace mongo {
                  * data back in time, but the main idea here is to avoid overloading the
                  * primary when secondary is available.
                  */
-                readPreference == ReadPreference_SecondaryPreferred) &&
-                !okForSecondaryQueries()) {
-            return false;
+                readPreference == ReadPreference_SecondaryPreferred)) {
+            // force a reselection if the queueTotal for this node is positive
+            if ( !okForSecondaryQueries() || queueTotal > 0 ) {
+                return false;
+            }
         }
 
         if ((readPreference == ReadPreference_PrimaryOnly ||
@@ -1598,7 +1614,8 @@ namespace mongo {
 
     DBClientConnection* DBClientReplicaSet::selectNodeUsingTags(ReadPreference preference,
                                                                 TagSet* tags) {
-        if (checkLastHost(preference, tags)) {
+        // force a reselection every 100 calls just to keep things balanced
+        if (checkLastHost(preference, tags) && rand() % 100 != 0) {
             return _lastSlaveOkConn.get();
         }
 

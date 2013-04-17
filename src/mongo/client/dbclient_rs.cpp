@@ -712,25 +712,12 @@ namespace mongo {
         try {
             Timer t;
             BSONObj o;
-            conn->serverStatus(&o);
+            conn->isMaster( isMaster, &o );
 
-            if ( !(o.hasField("repl") && o["repl"].type() == Object) ) {
-                warning() << "node: " << conn->getServerAddress() 
-                          << " isn't a part of any replica set. serverStatus: " << o << endl;
-                if ( nodesOffset >= 0 ) {
-                    scoped_lock lk( _lock );
-                    _nodes[nodesOffset].ok = false;
-                }
-                return false;
-            }
-
-            BSONObj repl = o["repl"].embeddedObject();
-            isMaster = repl["ismaster"].trueValue();
-
-            if ( repl["setName"].type() != String || repl["setName"].String() != _name ) {
-                warning() << "node: " << conn->getServerAddress() 
-                          << " isn't a part of set: " << _name 
-                          << " ismaster: " << repl << endl;
+            if ( o["setName"].type() != String || o["setName"].String() != _name ) {
+                warning() << "node: " << conn->getServerAddress()
+                          << " isn't a part of set: " << _name
+                          << " ismaster: " << o << endl;
                 if ( nodesOffset >= 0 ) {
                     scoped_lock lk( _lock );
                     _nodes[nodesOffset].ok = false;
@@ -751,11 +738,11 @@ namespace mongo {
                     node.pingTimeMillis += (commandTime - node.pingTimeMillis) / 4;
                 }
 
-                node.hidden = repl["hidden"].trueValue();
-                node.secondary = repl["secondary"].trueValue();
+                node.hidden = o["hidden"].trueValue();
+                node.secondary = o["secondary"].trueValue();
                 node.ismaster = isMaster;
 
-                node.lastIsMaster = repl.copy();
+                node.lastIsMaster = o.copy();
                 // health status
                 if ( (o.hasField("healthStatus") && o["healthStatus"].type() == Object) ) {
                     BSONObj healthStatus = o["healthStatus"].embeddedObject();
@@ -770,20 +757,20 @@ namespace mongo {
             }
 
             log( ! verbose ) << "ReplicaSetMonitor::_checkConnection: " << conn->toString()
-                             << ' ' << repl << endl;
+                             << ' ' << o << endl;
             
             // add other nodes
             BSONArrayBuilder b;
-            if ( repl["hosts"].type() == Array ) {
-                if ( repl["primary"].type() == String )
-                    maybePrimary = repl["primary"].String();
+            if ( o["hosts"].type() == Array ) {
+                if ( o["primary"].type() == String )
+                    maybePrimary = o["primary"].String();
 
-                BSONObjIterator it( repl["hosts"].Obj() );
+                BSONObjIterator it( o["hosts"].Obj() );
                 while( it.more() ) b.append( it.next() );
             }
 
-            if (repl.hasField("passives") && repl["passives"].type() == Array) {
-                BSONObjIterator it( repl["passives"].Obj() );
+            if (o.hasField("passives") && o["passives"].type() == Array) {
+                BSONObjIterator it( o["passives"].Obj() );
                 while( it.more() ) b.append( it.next() );
             }
             

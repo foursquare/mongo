@@ -49,6 +49,7 @@
 #include "pcrecpp.h"
 #include "mongo/db/instance.h"
 #include "mongo/db/queryutil.h"
+#include "modules/killfilewatcher.h"
 
 namespace mongo {
 
@@ -146,6 +147,29 @@ namespace mongo {
     bool replAuthenticate(DBClientBase *conn);
 
     void appendReplicationInfo( BSONObjBuilder& result , bool authed , int level ) {
+        {
+            BSONObjBuilder health;
+
+            string msg = "healthy";
+            bool healthy = true;
+
+            bool killFileExists = killFileWatcher.isKilled();
+            if (killFileExists) {
+                healthy = false;
+                string killFileContents = killFileWatcher.contentsOfKillFile();
+                if (killFileContents.size() == 0) {
+                    msg = "kill file is present, forcing unhealthy status";
+                } else {
+                    msg = "kill file is present, forcing unhealthy status: " + killFileContents;
+                }
+            }
+
+            health.append("ok", healthy);
+            health.append("msg", msg);
+            health.append("killFile", killFileExists);
+
+            result.append("healthStatus", health.obj());
+        }
 
         if ( replSet ) {
             if( theReplSet == 0 || theReplSet->state().shunned() ) {

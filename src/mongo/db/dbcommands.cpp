@@ -51,7 +51,6 @@
 #include "../server.h"
 #include "mongo/db/index_update.h"
 #include "mongo/db/repl/bgsync.h"
-#include "modules/killfilewatcher.h"
 
 namespace mongo {
 
@@ -508,31 +507,6 @@ namespace mongo {
             reportLockStats(result);
 
             {
-                BSONObjBuilder health;
-
-                string msg = "healthy";
-                bool healthy = true;
-
-                bool killFileExists = killFileWatcher.isKilled();
-                if (killFileExists) {
-                    healthy = false;
-                    string killFileContents = killFileWatcher.contentsOfKillFile();
-                    if (killFileContents.size() == 0) {
-                        msg = "kill file is present, forcing unhealthy status";
-                    } else {
-                        msg = "kill file is present, forcing unhealthy status: " + killFileContents;
-                    }
-                }
-
-                health.append("ok", healthy);
-                health.append("msg", msg);
-                health.append("killFile", killFileExists);
-
-                result.append("healthStatus", health.obj());
-            }
-            timeBuilder.appendNumber( "after health" , Listener::getElapsedTimeMillis() - start );
-
-            {
                 BSONObjBuilder t;
                 
                 t.append( "totalTime" , (long long)(1000 * ( curTimeMillis64() - _started ) ) );
@@ -678,9 +652,6 @@ namespace mongo {
                 result.append("dur", dur::stats.asObj());
             }
 
-            // HACK(leo): turn off recordStats only if explicitly setting {recordStats : 0}.
-            // killfile patch calls this, and it would otherwise block on the following section while 
-            // indexing during resyncs. (https://jira.mongodb.org/browse/CS-6141)
             BSONElement e = cmdObj["recordStats"];
             if ( !e.type() || e.trueValue() )
             {

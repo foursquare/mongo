@@ -105,7 +105,7 @@ namespace replset {
                     }
                 }
 
-                markOplog();
+//                markOplog();
             }
             catch (DBException &e) {
                 clearTarget = true;

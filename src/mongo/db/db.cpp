@@ -166,6 +166,51 @@ namespace mongo {
 #endif
     }
 
+    class SlowQueryVerboser : public BackgroundJob {
+    public:
+        SlowQueryVerboser() {
+        }
+        virtual ~SlowQueryVerboser() {}
+
+        virtual void run() {
+            int orig = logLevel;
+            int curr = logLevel;
+            while (1) {
+                // scan curop list and if anything is slow,
+                // raise log verbosity level for a bit.
+                // Then reset.
+                sleepsecs(1);
+
+                // restore loglevel in case we elevated it last time
+                curr = orig;
+
+                scoped_lock client_lock(Client::clientsMutex);
+                for (std::set<Client*>::iterator it = Client::clients.begin();
+                     it != Client::clients.end();
+                     it++) {
+
+                    Client *client = *it;
+                    if (!client) continue;
+
+                    CurOp* curop = client->curop();
+                    if (!curop || !curop->active()) {
+                        continue;
+                    }
+                    if (curop->elapsedMillis() > 800) {
+                        curr = 4;
+                        log() << "raising log level due to " << curop->infoNoauth() << endl;
+                        break;
+                    }
+                }
+                logLevel = curr;
+            }
+        }
+        virtual std::string name() const {
+            return "slow query verboser";
+        }
+
+    } slowQueryVerboser;
+
     /* if server is really busy, wait a bit */
     void beNice() {
         sleepmicros( Client::recommendedYieldMicros() );
@@ -541,6 +586,7 @@ namespace mongo {
         snapshotThread.go();
         d.clientCursorMonitor.go();
         PeriodicTask::theRunner->go();
+        slowQueryVerboser.go();
         if (missingRepl) {
             log() << "** warning: not starting TTL monitor" << startupWarningsLog;
             log() << "**          if this member is not part of a replica set and you want to use "

@@ -1598,7 +1598,8 @@ namespace mongo {
 
     DBClientConnection* DBClientReplicaSet::selectNodeUsingTags(ReadPreference preference,
                                                                 TagSet* tags) {
-        if (checkLastHost(preference, tags)) {
+         // force a reselection every 100 calls just to keep things balanced
+        if (checkLastHost(preference, tags) && rand() % 100 != 0) {
             return _lastSlaveOkConn.get();
         }
 

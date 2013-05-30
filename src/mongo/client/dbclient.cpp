@@ -569,6 +569,8 @@ namespace mongo {
     }
 
     BSONObj ismastercmdobj = fromjson("{\"ismaster\":1}");
+    // HACK(leo): wrt {recordStats: 0}, see dbcommands.cpp and https://jira.mongodb.org/browse/CS-6141
+    BSONObj serverstatuscmdobj = fromjson("{\"serverStatus\":1, \"recordStats\":0}");
 
     bool DBClientWithCommands::isMaster(bool& isMaster, BSONObj *info) {
         BSONObj o;

@@ -1759,7 +1759,8 @@ namespace mongo {
 
     DBClientConnection* DBClientReplicaSet::selectNodeUsingTags(
             shared_ptr<ReadPreferenceSetting> readPref) {
-        if (checkLastHost(readPref.get())) {
+        // force a reselection every 100 calls just to keep things balanced
+        if (checkLastHost(readPref.get()) && rand() % 100 != 0) {
             return _lastSlaveOkConn.get();
         }
 

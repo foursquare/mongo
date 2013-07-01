@@ -380,7 +380,7 @@ namespace mongo {
         ClientConnections::threadInstance()->checkVersions( ns );
     }
 
-    bool ShardConnection::releaseConnectionsAfterResponse( false );
+    bool ShardConnection::releaseConnectionsAfterResponse( true );
 
     void ShardConnection::releaseMyConnections() {
         ClientConnections::threadInstance()->releaseAll();

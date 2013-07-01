@@ -782,8 +782,12 @@ namespace mongo {
                     return false;
                 }
 
-                if ( ! conn->get()->simpleCommand( "config" , &x , "dbhash" ) )
+                if ( ! conn->get()->runCommand( "config",
+                        BSON( "dbhash" << 1 <<
+                              "collections" << BSON_ARRAY( "chunks" << "databases" ) ), x ) )
+                {
                     x = BSONObj();
+                }
                 else {
                     x = x.getOwned();
                     if ( up == 0 )

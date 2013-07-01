@@ -40,7 +40,10 @@ namespace mongo {
     Balancer::~Balancer() {
     }
 
-    int Balancer::_moveChunks( const vector<CandidateChunkPtr>* candidateChunks , bool secondaryThrottle ) {
+    int Balancer::_moveChunks( const vector<CandidateChunkPtr>* candidateChunks ,
+                               bool secondaryThrottle,
+                               int secsToSleepBetweenMoves )
+    {
         int movedCount = 0;
 
         for ( vector<CandidateChunkPtr>::const_iterator it = candidateChunks->begin(); it != candidateChunks->end(); ++it ) {
@@ -67,6 +70,15 @@ namespace mongo {
 
             BSONObj res;
             if ( c->moveAndCommit( Shard::make( chunkInfo.to ) , Chunk::MaxChunkSize , secondaryThrottle , res ) ) {
+
+                // Sleep a short time between collection moves, to prevent config refreshing from last
+                // round interfering with this round when the config server is heavily loaded.
+                if ( secsToSleepBetweenMoves > 0 ) {
+                    log() << "sleeping " << secsToSleepBetweenMoves
+                            << " secs before balancing next chunk" << endl;
+                    sleepsecs( secsToSleepBetweenMoves );
+                }
+
                 movedCount++;
                 continue;
             }
@@ -356,7 +368,9 @@ namespace mongo {
                         _balancedLastTime = 0;
                     }
                     else {
-                        _balancedLastTime = _moveChunks( &candidateChunks, balancerConfig["_secondaryThrottle"].trueValue() );
+                        _balancedLastTime = _moveChunks( &candidateChunks,
+                                                         balancerConfig["_secondaryThrottle"].trueValue(),
+                                                         balancerConfig["_secsToSleepBetweenMoves"].numberInt() );
                     }
                     
                     LOG(1) << "*** end of balancing round" << endl;

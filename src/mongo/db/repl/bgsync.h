@@ -83,7 +83,6 @@ namespace replset {
         boost::mutex _lastOpMutex;
 
         Member* _oplogMarkerTarget;
-        OplogReader _oplogMarker; // not locked, only used by notifier thread
         OpTime _consumedOpTime; // not locked, only used by notifier thread
 
         struct QueueCounter {
@@ -115,6 +114,13 @@ namespace replset {
         // tells the sync target where this member is synced to
         void markOplog();
         bool hasCursor();
+
+        // Sets _oplogMarkerTarget and calls connect();
+        // used for both the notifier command and the older OplogReader style notifier
+        bool connectOplogNotifier();
+
+//        bool isAssumingPrimary();
+
     public:
         static BackgroundSync* get();
         static void shutdown();

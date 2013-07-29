@@ -578,7 +578,6 @@ namespace mongo {
         verify( _name.empty() || _name == config()._id );
         _name = config()._id;
         verify( !_name.empty() );
-
         // this is a shortcut for simple changes
         if( additive ) {
             log() << "replSet info : additive change to configuration" << rsLog;
@@ -607,6 +606,10 @@ namespace mongo {
         _members.orphanAll();
 
         endOldHealthTasks();
+        
+        // Clear out our memory of who might have been syncing from us.
+        // Any incoming handshake connections after this point will be newly registered.
+        ghost->clearCache();
 
         int oldPrimaryId = -1;
         {
@@ -896,6 +899,16 @@ namespace mongo {
         builder.append("h", obj["h"]);
         Lock::DBWrite cx( "local" );
         Helpers::putSingleton("local.replset.minvalid", builder.obj());
+    }
+
+    void ReplSetImpl::registerSlave(const BSONObj& rid, const int memberId) {
+        // To prevent race conditions with clearing the cache at reconfig time,
+        // we lock the replset mutex here.
+        {
+            lock lk(this);
+            ghost->associateSlave(rid, memberId);
+        }
+        syncSourceFeedback.associateMember(rid, memberId);
     }
 
 }

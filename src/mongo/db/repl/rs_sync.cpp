@@ -745,6 +745,11 @@ namespace replset {
         }
     }
 
+    void GhostSync::clearCache() {
+        rwlock lk(_lock, true);
+        _ghostCache.clear();
+    }
+
     void GhostSync::associateSlave(const BSONObj& id, const int memberId) {
         const OID rid = id["_id"].OID();
         rwlock lk( _lock , true );
@@ -786,9 +791,8 @@ namespace replset {
         ((ReplSetConfig::MemberCfg)slave.slave->config()).updateGroups(last);
     }
 
-    void GhostSync::percolate(const BSONObj& id, const OpTime& last) {
-        const OID rid = id["_id"].OID();
-        GhostSlave* slave;
+    void GhostSync::percolate(const mongo::OID& rid, const OpTime& last) {
+        shared_ptr<GhostSlave> slave;
         {
             rwlock lk( _lock , false );
 
@@ -798,7 +802,7 @@ namespace replset {
                 return;
             }
 
-            slave = i->second.get();
+            slave = i->second;
             if (!slave->init) {
                 OCCASIONALLY log() << "couldn't percolate slave " << rid << " not init" << rsLog;
                 return;
@@ -806,50 +810,59 @@ namespace replset {
         }
 
         verify(slave->slave);
-
-        const Member *target = replset::BackgroundSync::get()->getSyncTarget();
-        if (!target || rs->box.getState().primary()
-            // we are currently syncing from someone who's syncing from us
-            // the target might end up with a new Member, but s.slave never
-            // changes so we'll compare the names
-            || target == slave->slave || target->fullName() == slave->slave->fullName()) {
-            LOG(1) << "replica set ghost target no good" << endl;
-            return;
-        }
-
-        try {
-            // haveCursor() does not necessarily tell us if we have a non-dead cursor, so we check
-            // tailCheck() as well; see SERVER-8420
-            slave->reader.tailCheck();
-            if (!slave->reader.haveCursor()) {
-                if (!slave->reader.connect(id, slave->slave->id(), target->fullName())) {
-                    // error message logged in OplogReader::connect
-                    return;
-                }
-                slave->reader.ghostQueryGTE(rsoplog, last);
-            }
-
-            LOG(1) << "replSet last: " << slave->last.toString() << " to " << last.toString() << rsLog;
-            if (slave->last > last) {
+     
+        // Keep trying to update until we either succeed or we become primary.
+        // Note that this can block the ghostsync thread for quite a while if there
+        // are connection problems to the current sync source ("sync target")
+        while (true) {
+            const Member *target = replset::BackgroundSync::get()->getSyncTarget();
+            if (!target || rs->box.getState().primary()
+                // we are currently syncing from someone who's syncing from us
+                // the target might end up with a new Member, but s.slave never
+                // changes so we'll compare the names
+                || target == slave->slave || target->fullName() == slave->slave->fullName()) {
+                LOG(1) << "replica set ghost target no good" << endl;
                 return;
             }
 
-            while (slave->last <= last) {
-                if (!slave->reader.more()) {
-                    // we'll be back
-                    return;
+            try {
+
+                // haveCursor() does not necessarily tell us if we have a non-dead cursor, 
+                // so we check tailCheck() as well; see SERVER-8420
+                slave->reader.tailCheck();
+                if (!slave->reader.haveCursor()) {
+                    if (!slave->reader.connect(rid, slave->slave->id(), target->fullName())) {
+                        // error message logged in OplogReader::connect
+                        sleepsecs(1);
+                        continue;
+                    }
+
+                    slave->reader.ghostQueryGTE(rsoplog, last);
+                    // if we lose the connection between connecting and querying, the cursor may not
+                    // exist so we have to check again before using it.
+                    if (!slave->reader.haveCursor()) {
+                        sleepsecs(1);
+                        continue;
+                    }
                 }
 
-                BSONObj o = slave->reader.nextSafe();
-                slave->last = o["ts"]._opTime();
+                while (slave->last <= last) {
+                    if (!slave->reader.more()) {
+                        // we'll be back
+                        return;
+                    }
+
+                    BSONObj o = slave->reader.nextSafe();
+                    slave->last = o["ts"]._opTime();
+                }
+                LOG(2) << "now last is " << slave->last.toString() << rsLog;
             }
-            LOG(2) << "now last is " << slave->last.toString() << rsLog;
-        }
-        catch (DBException& e) {
-            // we'll be back
-            LOG(2) << "replSet ghost sync error: " << e.what() << " for "
-                   << slave->slave->fullName() << rsLog;
-            slave->reader.resetConnection();
+            catch (DBException& e) {
+                // we'll be back
+                LOG(2) << "replSet ghost sync error: " << e.what() << " for "
+                       << slave->slave->fullName() << rsLog;
+                slave->reader.resetConnection();
+            }
         }
     }
 }

@@ -28,6 +28,8 @@
  */
 namespace mongo {
 
+    void updateSlaveLocations(BSONArray optimes);
+
     void updateSlaveLocation( CurOp& curop, const char * oplog_ns , OpTime lastOp );
 
     /** @return true if op has made it to w servers */
@@ -35,6 +37,8 @@ namespace mongo {
     bool opReplicatedEnough( OpTime op , BSONElement w );
 
     bool waitForReplication( OpTime op , int w , int maxSecondsToWait );
+
+    std::vector<BSONObj> getHostsReplicatedTo(OpTime& op);
 
     void resetSlaveCache();
     unsigned getSlaveCount();

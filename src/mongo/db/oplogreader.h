@@ -34,9 +34,9 @@ namespace mongo {
         }
 
         /* ok to call if already connected */
-        bool connect(string hostname);
+        bool connect(const std::string& hostname);
 
-        bool connect(const BSONObj& rid, const int from, const string& to);
+        bool connect(const mongo::OID& rid, const int from, const string& to);
 
         void tailCheck() {
             if( cursor.get() && cursor->isDead() ) {
@@ -68,6 +68,11 @@ namespace mongo {
             query(ns, q2.done());
         }
         */
+        void query(const char *ns,
+                   Query query,
+                   int nToReturn,
+                   int nToSkip,
+                   const BSONObj* fields=0);
 
         void tailingQuery(const char *ns, const BSONObj& query, const BSONObj* fields=0);
 
@@ -108,7 +113,7 @@ namespace mongo {
     private:
         /** @return true iff connection was successful */ 
         bool commonConnect(const string& hostName);
-        bool passthroughHandshake(const BSONObj& rid, const int f);
+        bool passthroughHandshake(const mongo::OID& rid, const int f);
     };
 
 }

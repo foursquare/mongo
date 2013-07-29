@@ -448,6 +448,16 @@ namespace mongo {
             b.append("blind",true); // to avoid confusion if set...normally never set except for testing.
     }
 
+    Member* ReplSetImpl::getMutableMember(unsigned id) {
+        if( _self && id == _self->id() ) return _self;
+
+        for( Member *m = head(); m; m = m->next() )
+            if( m->id() == id )
+                return m;
+        return 0;
+    }
+
+
     static struct Test : public StartupTest {
         void run() {
             HealthOptions a,b;

@@ -44,10 +44,10 @@ namespace mongo {
 
         struct Ident {
 
-            Ident(const BSONObj& r, const string& h, const string& n) {
+            Ident(const BSONObj& r, const BSONObj& config, const string& n) {
                 BSONObjBuilder b;
                 b.appendElements( r );
-                b.append( "host" , h );
+                b.append( "config" , config );
                 b.append( "ns" , n );
                 obj = b.obj();
             }
@@ -115,27 +115,29 @@ namespace mongo {
             _slaves.clear();
         }
 
-        void update( const BSONObj& rid , const string& host , const string& ns , OpTime last ) {
-            REPLDEBUG( host << " " << rid << " " << ns << " " << last );
+        void update( const BSONObj& rid , const BSONObj config , const string& ns , OpTime last ) {
+            REPLDEBUG( config << " " << rid << " " << ns << " " << last );
 
-            Ident ident(rid,host,ns);
+            Ident ident(rid, config, ns);
 
             scoped_lock mylk(_mutex);
 
-            _slaves[ident] = last;
-            _dirty = true;
+            if (last > _slaves[ident]) {
+                _slaves[ident] = last;
+                _dirty = true;
 
-            if (theReplSet && theReplSet->isPrimary()) {
-                theReplSet->ghost->updateSlave(ident.obj["_id"].OID(), last);
-            }
+                if (theReplSet && theReplSet->isPrimary()) {
+                    theReplSet->ghost->updateSlave(ident.obj["_id"].OID(), last);
+                }
 
-            if ( ! _started ) {
-                // start background thread here since we definitely need it
-                _started = true;
-                go();
+                if ( ! _started ) {
+                    // start background thread here since we definitely need it
+                    _started = true;
+                    go();
+                }
+
+                _threadsWaitingForReplication.notify_all();
             }
-            
-            _threadsWaitingForReplication.notify_all();
         }
 
         bool opReplicatedEnough( OpTime op , BSONElement w ) {
@@ -217,6 +219,19 @@ namespace mongo {
             return numSlaves <= 0;
         }
 
+        std::vector<BSONObj> getSlavesAtOp(OpTime& op) {
+            std::vector<BSONObj> result;
+
+            scoped_lock mylk(_mutex);
+            for (map<Ident,OpTime>::iterator i = _slaves.begin(); i != _slaves.end(); i++) {
+                OpTime replicatedTo = i->second;
+                if (replicatedTo >= op) {
+                    result.push_back(i->first.obj["config"].Obj());
+                }
+            }
+
+            return result;
+        }
 
         unsigned getSlaveCount() const {
             scoped_lock mylk(_mutex);
@@ -237,6 +252,27 @@ namespace mongo {
 
     const char * SlaveTracking::NS = "local.slaves";
 
+    // parse optimes from replUpdatePositionCommand and pass them to SyncSourceFeedback
+    void updateSlaveLocations(BSONArray optimes) {
+        BSONForEach(elem, optimes) {
+            BSONObj entry = elem.Obj();
+            BSONObj id = BSON("_id" << entry["_id"].OID());
+            OpTime ot = entry["optime"]._opTime();
+            BSONObj config = entry["config"].Obj();
+
+            // update locally
+            // This updates the slave tracking map, as well as updates
+            // the GhostSlave cache, and updates the tag groups
+            slaveTracking.update(id, config, "local.oplog.rs", ot);
+
+            if (theReplSet && !theReplSet->isPrimary()) {
+                // pass along if we are not primary
+                LOG(2) << "percolating " << ot.toString() << " from " << entry << endl;
+                theReplSet->syncSourceFeedback.percolate(entry["_id"].OID(), ot);
+            }
+        }
+    }
+
     void updateSlaveLocation( CurOp& curop, const char * ns , OpTime lastOp ) {
         if ( lastOp.isNull() )
             return;
@@ -249,13 +285,23 @@ namespace mongo {
         if ( rid.isEmpty() )
             return;
 
-        slaveTracking.update( rid , curop.getRemoteString( false ) , ns , lastOp );
+        BSONObj handshake = c->getHandshake();
+        if (handshake.hasField("config")) {
+            slaveTracking.update(rid, handshake["config"].Obj(), ns, lastOp);
+        }
+        else {
+            BSONObjBuilder bob;
+            bob.append("host", curop.getRemoteString());
+            bob.append("upgradeNeeded", true);
+            slaveTracking.update(rid, bob.done(), ns, lastOp);
+        }
 
         if (theReplSet && !theReplSet->isPrimary()) {
             // we don't know the slave's port, so we make the replica set keep
             // a map of rids to slaves
-            LOG(2) << "percolating " << lastOp.toString() << " from " << rid << endl;
-            theReplSet->ghost->send( boost::bind(&GhostSync::percolate, theReplSet->ghost, rid, lastOp) );
+            // pass along if we are not primary
+            LOG(2) << "getmore percolating " << lastOp.toString() << " from " << rid << endl;
+            theReplSet->syncSourceFeedback.percolate(rid["_id"].OID(), lastOp);
         }
     }
 
@@ -271,6 +317,9 @@ namespace mongo {
         return slaveTracking.waitForReplication( op, w, maxSecondsToWait );
     }
 
+    vector<BSONObj> getHostsReplicatedTo(OpTime& op) {
+        return slaveTracking.getSlavesAtOp(op);
+    }
 
     void resetSlaveCache() {
         slaveTracking.reset();

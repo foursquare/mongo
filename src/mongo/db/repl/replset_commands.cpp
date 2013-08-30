@@ -19,6 +19,7 @@
 #include "../commands.h"
 #include "../repl.h"
 #include "health.h"
+#include "mongo/db/oplog.h"
 #include "rs.h"
 #include "rs_config.h"
 #include "../dbwebserver.h"
@@ -315,6 +316,37 @@ namespace mongo {
             return theReplSet->forceSyncFrom(newTarget, errmsg, result);
         }
     } cmdReplSetSyncFrom;
+    
+    class CmdReplSetUpdatePosition: public ReplSetCommand {
+    public:
+        virtual void help( stringstream &help ) const {
+            help << "internal";
+        }
+        CmdReplSetUpdatePosition() : ReplSetCommand("replSetUpdatePosition") { }
+        virtual bool run(const string& , BSONObj& cmdObj, int, string& errmsg,
+                         BSONObjBuilder& result, bool fromRepl) {
+            if (!check(errmsg, result))
+                return false;
+
+            if (cmdObj.hasField("handshake")) {
+                // we have received a handshake, not an update message
+                // handshakes are done here to ensure the receiving end supports the update command
+                cc().gotHandshake(cmdObj["handshake"].embeddedObject());
+                // if we aren't primary, pass the handshake along
+                if (!theReplSet->isPrimary() && theReplSet->syncSourceFeedback.supportsUpdater()) {
+                    theReplSet->syncSourceFeedback.forwardSlaveHandshake();
+                }
+                return true;
+            }
+
+            uassert(16888, "optimes field should be an array with an object for each secondary",
+                    cmdObj["optimes"].type() == Array);
+            BSONArray newTimes = BSONArray(cmdObj["optimes"].Obj());
+            updateSlaveLocations(newTimes);
+
+            return true;
+        }
+    } cmdReplSetUpdatePosition;
 
     using namespace bson;
     using namespace mongoutils::html;

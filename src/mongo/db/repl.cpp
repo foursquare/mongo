@@ -144,7 +144,6 @@ namespace mongo {
         return replSettings.slave || replSettings.master || theReplSet;
     }
 
-    bool replAuthenticate(DBClientBase *conn);
 
     void appendReplicationInfo( BSONObjBuilder& result , bool authed , int level ) {
 
@@ -208,17 +207,7 @@ namespace mongo {
                     scoped_ptr<ScopedDbConnection> conn(
                             ScopedDbConnection::getInternalScopedDbConnection(
                                     s["host"].valuestr() ) );
-                    DBClientConnection *cliConn = dynamic_cast< DBClientConnection* >( &conn->conn() );
-                    if ( cliConn && replAuthenticate( cliConn ) ) {
-                        BSONObj first = conn->get()->findOne( (string)"local.oplog.$" + sourcename,
-                                                              Query().sort( BSON( "$natural" << 1 ) ) );
-                        BSONObj last = conn->get()->findOne( (string)"local.oplog.$" + sourcename,
-                                                             Query().sort( BSON( "$natural" << -1 ) ) );
-                        bb.appendDate( "masterFirst" , first["ts"].timestampTime() );
-                        bb.appendDate( "masterLast" , last["ts"].timestampTime() );
-                        double lag = (double) (last["ts"].timestampTime() - s["syncedTo"].timestampTime());
-                        bb.append( "lagSeconds" , lag / 1000 );
-                    }
+
                     conn->done();
                 }
 
@@ -1094,122 +1083,6 @@ namespace mongo {
         }
         return true;
     }
-
-    bool replHandshake(DBClientConnection *conn) {
-        string myname = getHostName();
-
-        BSONObj me;
-        {
-            
-            Lock::DBWrite l("local");
-            // local.me is an identifier for a server for getLastError w:2+
-            if ( ! Helpers::getSingleton( "local.me" , me ) ||
-                 ! me.hasField("host") ||
-                 me["host"].String() != myname ) {
-
-                // clean out local.me
-                Helpers::emptyCollection("local.me");
-
-                // repopulate
-                BSONObjBuilder b;
-                b.appendOID( "_id" , 0 , true );
-                b.append( "host", myname );
-                me = b.obj();
-                Helpers::putSingleton( "local.me" , me );
-            }
-        }
-
-        BSONObjBuilder cmd;
-        cmd.appendAs( me["_id"] , "handshake" );
-        if (theReplSet) {
-            cmd.append("member", theReplSet->selfId());
-        }
-
-        BSONObj res;
-        bool ok = conn->runCommand( "admin" , cmd.obj() , res );
-        // ignoring for now on purpose for older versions
-        LOG( ok ? 1 : 0 ) << "replHandshake res not: " << ok << " res: " << res << endl;
-        return true;
-    }
-
-    OplogReader::OplogReader( bool doHandshake ) : 
-        _doHandshake( doHandshake ) { 
-        
-        _tailingQueryOptions = QueryOption_SlaveOk;
-        _tailingQueryOptions |= QueryOption_CursorTailable | QueryOption_OplogReplay;
-        
-        /* TODO: slaveOk maybe shouldn't use? */
-        _tailingQueryOptions |= QueryOption_AwaitData;
-    }
-
-    bool OplogReader::commonConnect(const string& hostName) {
-        if( conn() == 0 ) {
-            _conn = shared_ptr<DBClientConnection>(new DBClientConnection(false,
-                                                                          0,
-                                                                          30 /* tcp timeout */));
-            string errmsg;
-            ReplInfo r("trying to connect to sync source");
-            if ( !_conn->connect(hostName.c_str(), errmsg) ||
-                 (!noauth && !replAuthenticate(_conn.get())) ) {
-                resetConnection();
-                log() << "repl: " << errmsg << endl;
-                return false;
-            }
-        }
-        return true;
-    }
-    
-    bool OplogReader::connect(string hostName) {
-        if (conn() != 0) {
-            return true;
-        }
-
-        if ( ! commonConnect(hostName) ) {
-            return false;
-        }
-        
-        
-        if ( _doHandshake && ! replHandshake(_conn.get() ) ) {
-            return false;
-        }
-
-        return true;
-    }
-
-    bool OplogReader::connect(const BSONObj& rid, const int from, const string& to) {
-        if (conn() != 0) {
-            return true;
-        }
-        if (commonConnect(to)) {
-            log() << "handshake between " << from << " and " << to << endl;
-            return passthroughHandshake(rid, from);
-        }
-        return false;
-    }
-
-    bool OplogReader::passthroughHandshake(const BSONObj& rid, const int f) {
-        BSONObjBuilder cmd;
-        cmd.appendAs( rid["_id"], "handshake" );
-        cmd.append( "member" , f );
-
-        BSONObj res;
-        return conn()->runCommand( "admin" , cmd.obj() , res );
-    }
-
-    void OplogReader::tailingQuery(const char *ns, const BSONObj& query, const BSONObj* fields ) {
-        verify( !haveCursor() );
-        LOG(2) << "repl: " << ns << ".find(" << query.toString() << ')' << endl;
-        cursor.reset( _conn->query( ns, query, 0, 0, fields, _tailingQueryOptions ).release() );
-    }
-    
-    void OplogReader::tailingQueryGTE(const char *ns, OpTime t, const BSONObj* fields ) {
-        BSONObjBuilder q;
-        q.appendDate("$gte", t.asDate());
-        BSONObjBuilder query;
-        query.append("ts", q.done());
-        tailingQuery(ns, query.done(), fields);
-    }
-
 
     /* note: not yet in mutex at this point.
        returns >= 0 if ok.  return -1 if you want to reconnect.

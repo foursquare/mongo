@@ -57,7 +57,7 @@ public:
 
         log() << "going to connect" << endl;
         
-        OplogReader r(false);
+        OplogReader r;
         r.setTailingQueryOptions( QueryOption_SlaveOk | QueryOption_AwaitData );
         r.connect( getParam( "from" ) );
 

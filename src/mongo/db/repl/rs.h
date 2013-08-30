@@ -27,6 +27,7 @@
 #include "mongo/db/repl/rs_member.h"
 #include "mongo/db/repl/rs_optime.h"
 #include "mongo/db/repl/rs_sync.h"
+#include "mongo/db/repl/sync_source_feedback.h"
 #include "mongo/util/concurrency/list.h"
 #include "mongo/util/concurrency/msg.h"
 #include "mongo/util/concurrency/thread_pool.h"
@@ -142,9 +143,10 @@ namespace mongo {
          * it to P (_currentSyncTarget). Then it would use this connection to
          * pretend to be S1, replicating off of P.
          */
-        void percolate(const BSONObj& rid, const OpTime& last);
+        void percolate(const mongo::OID& rid, const OpTime& last);
         void associateSlave(const BSONObj& rid, const int memberId);
         void updateSlave(const mongo::OID& id, const OpTime& last);
+        void clearCache();
     };
 
     struct Target;
@@ -328,6 +330,8 @@ namespace mongo {
 
         StateBox box;
 
+        SyncSourceFeedback syncSourceFeedback;
+
         OpTime lastOpTimeWritten;
         long long lastH; // hash we use to make sure we are reading the right flow of ops and aren't on an out-of-date "fork"
         bool forceSyncFrom(const string& host, string& errmsg, BSONObjBuilder& result);
@@ -477,10 +481,14 @@ namespace mongo {
          * have called it again, passing in false.
          */
         bool setMaintenanceMode(const bool inc);
+
+        // Records a new slave's id in the GhostSlave map, at handshake time.
+        void registerSlave(const BSONObj& rid, const int memberId);
     private:
         Member* head() const { return _members.head(); }
     public:
         const Member* findById(unsigned id) const;
+        Member* getMutableMember(unsigned id);
     private:
         void _getTargets(list<Target>&, int &configVersion);
         void getTargets(list<Target>&, int &configVersion);

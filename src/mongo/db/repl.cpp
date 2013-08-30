@@ -49,6 +49,7 @@
 #include "pcrecpp.h"
 #include "mongo/db/instance.h"
 #include "mongo/db/queryutil.h"
+#include "modules/killfilewatcher.h"
 
 namespace mongo {
 
@@ -251,9 +252,11 @@ namespace mongo {
 
             result.appendNumber("maxBsonObjectSize", BSONObjMaxUserSize);
             result.appendDate("localTime", jsTime());
+            killFileWatcher.appendHealthStatus( result );
+            
             return true;
         }
-    } cmdismaster;
+    } cmdismaster; 
 
     ReplSource::ReplSource() {
         nClonedThisPass = 0;

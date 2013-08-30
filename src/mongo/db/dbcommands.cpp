@@ -51,6 +51,7 @@
 #include "../server.h"
 #include "mongo/db/index_update.h"
 #include "mongo/db/repl/bgsync.h"
+#include "modules/killfilewatcher.h"
 
 namespace mongo {
 
@@ -508,6 +509,10 @@ namespace mongo {
             result.appendDate( "localTime" , jsTime() );
 
             reportLockStats(result);
+            
+            killFileWatcher.appendHealthStatus( result );
+ 
+            timeBuilder.appendNumber( "after health" , Listener::getElapsedTimeMillis() - start );
 
             {
                 BSONObjBuilder t;

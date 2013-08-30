@@ -197,7 +197,7 @@ namespace mongo {
         void run() {
             log() << "starting" << endl;
             while ( ! inShutdown() ) {
-                sleepsecs( 10 );
+                sleepsecs( ReplicaSetMonitor::getSleepSecs() );
                 try {
                     ReplicaSetMonitor::checkAll( true );
                 }
@@ -354,6 +354,14 @@ namespace mongo {
     void ReplicaSetMonitor::setLocalThresholdMillis( const int millis ) {
         scoped_lock lk( _lock );
         _localThresholdMillis = millis;
+    }
+
+    void ReplicaSetMonitor::setSleepSecs( int sleepSecs ) {
+        _sleepSecs = sleepSecs;
+    }
+
+    int ReplicaSetMonitor::getSleepSecs() {
+        return _sleepSecs;
     }
 
     string ReplicaSetMonitor::getServerAddress() const {
@@ -737,6 +745,17 @@ namespace mongo {
                 node.ismaster = o["ismaster"].trueValue();
 
                 node.lastIsMaster = o.copy();
+                // health status
+                if ( (o.hasField("healthStatus") && o["healthStatus"].type() == Object) ) {
+                    BSONObj healthStatus = o["healthStatus"].embeddedObject();
+                    if ( healthStatus["ok"].trueValue() ) {
+                        node.healthCheckFailCount = 0;
+                    } else {
+                        node.healthCheckFailCount += 1;
+                    }
+                    node.healthMsg = healthStatus["msg"].String();
+                    node.healthKillFile = healthStatus["killFile"].trueValue();
+                }
             }
 
             LOG( verbose ? 0 : 1 ) << "ReplicaSetMonitor::_checkConnection: " << conn->toString()
@@ -989,6 +1008,9 @@ namespace mongo {
             builder.append("hidden", node.hidden);
             builder.append("secondary", node.secondary);
             builder.append("pingTimeMillis", node.pingTimeMillis);
+            builder.append("healthMsg", node.healthMsg);
+            builder.append("healthKillFile", node.healthKillFile);
+            builder.append("healthCheckFailCount", node.healthCheckFailCount);
 
             const BSONElement& tagElem = node.lastIsMaster["tags"];
             if (tagElem.ok() && tagElem.isABSONObj()) {
@@ -1271,6 +1293,7 @@ namespace mongo {
     map<string,ReplicaSetMonitorPtr> ReplicaSetMonitor::_sets;
     map<string,vector<HostAndPort> > ReplicaSetMonitor::_seedServers;
     ReplicaSetMonitor::ConfigChangeHook ReplicaSetMonitor::_hook;
+    int ReplicaSetMonitor::_sleepSecs;
     int ReplicaSetMonitor::_maxFailedChecks = 30; // At 1 check every 10 seconds, 30 checks takes 5 minutes
 
     // --------------------------------

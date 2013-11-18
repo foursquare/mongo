@@ -1830,7 +1830,7 @@ namespace mongo {
 
     DBClientConnection* DBClientReplicaSet::selectNodeUsingTags(
             shared_ptr<ReadPreferenceSetting> readPref) {
-        if (checkLastHost(readPref.get())) {
+        if (checkLastHost(readPref.get()) && rand() % 100 != 0) {
 
             LOG( 3 ) << "dbclient_rs selecting compatible last used node " << _lastSlaveOkHost
                                 << endl;

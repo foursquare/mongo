@@ -32,6 +32,7 @@
 #include "mongo/platform/bits.h"
 #include "mongo/s/d_logic.h"
 #include "mongo/util/net/sock.h"
+#include "../modules/killfilewatcher.h"
 
 using namespace std;
 
@@ -265,6 +266,13 @@ namespace mongo {
         for( Member *m = _members.head(); m; m = m->next() )
             L.push_back(m->h());
         return L;
+    }
+
+    bool ReplSetImpl::iAmPotentiallyHot() const {
+      return myConfig().potentiallyHot() && // not an arbiter
+        elect.steppedDown <= time(0) && // not stepped down/frozen
+        state() == MemberState::RS_SECONDARY && // not stale
+        !killFileWatcher.isForcedToNotBePrimary(); // no manual kill-file
     }
 
     void ReplSetImpl::_fillIsMasterHost(const Member *m, vector<string>& hosts, vector<string>& passives, vector<string>& arbiters) {
@@ -832,6 +840,28 @@ namespace mongo {
             log() << "replSet error unexpected exception in haveNewConfig()" << rsLog;
             _fatal();
         }
+    }
+
+    bool ReplSet::isSafeToStepDown(string& errmsg, BSONObjBuilder& detailedResponse) {
+        long long int lastOp = (long long int)theReplSet->lastOpTimeWritten.getSecs();
+        long long int closest = (long long int)theReplSet->lastOtherOpTime().getSecs();
+
+        long long int diff = lastOp - closest;
+        detailedResponse.append("closest", closest);
+        detailedResponse.append("difference", diff);
+
+        if (diff < 0) {
+            // not our problem, but we'll wait until thing settle down
+            errmsg = "someone is ahead of the primary?";
+            return false;
+        }
+
+        if (diff > 10) {
+            errmsg = "no secondaries within 10 seconds of my optime";
+            return false;
+        }
+
+        return true;
     }
 
     void Manager::msgReceivedNewConfig(BSONObj o) {

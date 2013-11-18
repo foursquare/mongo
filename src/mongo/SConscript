@@ -557,7 +557,8 @@ serverOnlyFiles += [ "s/d_logic.cpp",
                      "s/d_split.cpp",
                      "client/distlock_test.cpp",
                      "s/d_chunk_manager.cpp",
-                     "db/module.cpp" ]
+                     "db/module.cpp",
+                     "db/modules/killfilewatcher.cpp" ]
 
 env.StaticLibrary("defaultversion", "s/default_version.cpp")
 

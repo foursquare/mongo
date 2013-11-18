@@ -1190,8 +1190,10 @@ static void processCommandLineOptions(const std::vector<std::string>& argv) {
             log() << endl;
         }
 
-        Module::configAll(params);
-
+        if (!Module::configAll( params )) {
+            log() << "bad module configuration! see earlier logs for more detailed errors" << endl;
+            dbexit(EXIT_BADOPTIONS);
+        }
 #ifdef _WIN32
         ntservice::configureService(initService,
                                     params,

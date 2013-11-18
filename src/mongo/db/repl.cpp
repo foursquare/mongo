@@ -57,6 +57,7 @@
 #include "mongo/db/server_parameters.h"
 #include "mongo/db/queryutil.h"
 #include "mongo/base/counter.h"
+#include "modules/killfilewatcher.h"
 
 namespace mongo {
 
@@ -161,6 +162,7 @@ namespace mongo {
     bool replAuthenticate(DBClientBase *conn, bool skipAuthCheck);
 
     void appendReplicationInfo(BSONObjBuilder& result, int level) {
+        killFileWatcher.appendHealthStatus( result );
         if ( replSet ) {
             if( theReplSet == 0 || theReplSet->state().shunned() ) {
                 result.append("ismaster", false);
@@ -282,9 +284,11 @@ namespace mongo {
             result.appendNumber("maxBsonObjectSize", BSONObjMaxUserSize);
             result.appendNumber("maxMessageSizeBytes", MaxMessageSizeBytes);
             result.appendDate("localTime", jsTime());
+            killFileWatcher.appendHealthStatus( result );
+            
             return true;
         }
-    } cmdismaster;
+    } cmdismaster; 
 
     ReplSource::ReplSource() {
         nClonedThisPass = 0;

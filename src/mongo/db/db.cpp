@@ -60,6 +60,7 @@
 #include "mongo/util/startup_test.h"
 #include "mongo/util/text.h"
 #include "mongo/util/version.h"
+#include "mongo/client/dbclient_rs.h"
 
 #if !defined(_WIN32)
 # include <sys/file.h>
@@ -1151,6 +1152,12 @@ static void processCommandLineOptions(const std::vector<std::string>& argv) {
             out() << "****" << endl;
             dbexit( EXIT_BADOPTIONS );
         }
+
+        int interval = 10;
+        if ( params.count ( "checkInterval" ) ) {
+            interval = params["checkInterval"].as<int>();
+        }
+        ReplicaSetMonitor::setSleepSecs(interval);
 
         // needs to be after things like --configsvr parsing, thus here.
         if( repairpath.empty() )

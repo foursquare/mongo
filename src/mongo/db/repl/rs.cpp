@@ -46,6 +46,8 @@
 #include "mongo/s/d_logic.h"
 #include "mongo/util/net/sock.h"
 
+#include "mongo/db/modules/killfilewatcher/src/killfilewatcher.h"
+
 using namespace std;
 
 namespace mongo {
@@ -305,6 +307,13 @@ namespace {
         for( Member *m = _members.head(); m; m = m->next() )
             L.push_back(m->h());
         return L;
+    }
+
+    bool ReplSetImpl::iAmPotentiallyHot() const {
+          return myConfig().potentiallyHot() && // not an arbiter
+            elect.steppedDown <= time(0) && // not stepped down/frozen
+            state() == MemberState::RS_SECONDARY && // not stale
+            !killfileAgent.isForcedToNotBePrimary(); // no manual kill-file
     }
 
     void ReplSetImpl::_fillIsMasterHost(const Member *m, vector<string>& hosts, vector<string>& passives, vector<string>& arbiters) {
@@ -1045,6 +1054,30 @@ namespace {
             return false;
         }
         syncSourceFeedback.associateMember(rid, member);
+        return true;
+    }
+
+    bool ReplSet::isSafeToStepDown(std::string& errmsg, BSONObjBuilder& result) {
+        long long int lastOp = static_cast<long long int>(
+                                theReplSet->lastOpTimeWritten.getSecs());
+        long long int closest = static_cast<long long int>(
+                                theReplSet->lastOtherElectableOpTime().getSecs());
+
+        long long int diff = lastOp - closest;
+        result.append("closest", closest);
+        result.append("difference", diff);
+
+        if (diff < 0) {
+            // not our problem, but we'll wait until thing settle down
+            errmsg = "someone is ahead of the primary?";
+            return false;
+        }
+
+        if (diff > 10) {
+            errmsg = "no secondaries within 10 seconds of my optime";
+            return false;
+        }
+
         return true;
     }
 

@@ -423,6 +423,8 @@ namespace {
             builder.append("hidden", false); // we don't keep hidden nodes in the set
             builder.append("secondary", node.isUp && !node.isMaster);
             builder.append("pingTimeMillis", int(node.latencyMicros / 1000));
+            builder.append("healthMsg", node.healthMsg);
+            builder.append("healthCheckFailCount", node.healthCheckFailCount);
 
             if (!node.tags.isEmpty()) {
                 builder.append("tags", node.tags);
@@ -791,6 +793,16 @@ namespace {
             }
 
             tags = raw.getObjectField("tags");
+
+            if (raw.hasField("healthStatus") && raw["healthStatus"].type() == Object) {
+                BSONObj healthStatus = raw["healthStatus"].embeddedObject();
+                if (healthStatus["ok"].trueValue()) {
+                    healthCheckFailCount = 0;
+                } else {
+                    healthCheckFailCount += 1;
+                }
+                healthMsg = healthStatus["msg"].String();
+            }
         } catch (const std::exception& e) {
             ok = false;
             log() << "exception while parsing isMaster reply: " << e.what() << " " << obj;
@@ -848,6 +860,8 @@ namespace {
                 latencyMicros += (reply.latencyMicros - latencyMicros) / 4;
             }
         }
+        healthCheckFailCount = reply.healthCheckFailCount;
+        healthMsg = reply.healthMsg;
     }
 
     ReplicaSetMonitor::ConfigChangeHook SetState::configChangeHook;
@@ -919,7 +933,7 @@ namespace {
 
                 std::vector<const Node*> matchingNodes;
                 for (size_t i = 0; i < nodes.size(); i++ ) {
-                    if (nodes[i].matches(criteria.pref) && nodes[i].matches(tag)) {
+                    if (nodes[i].healthCheckFailCount < 1 && nodes[i].matches(criteria.pref) && nodes[i].matches(tag)) {
                         matchingNodes.push_back(&nodes[i]);
                     }
                 }

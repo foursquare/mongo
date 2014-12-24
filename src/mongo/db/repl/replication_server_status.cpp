@@ -44,6 +44,8 @@
 #include "mongo/db/wire_version.h"
 #include "mongo/s/write_ops/batched_command_request.h"
 
+#include "mongo/db/modules/killfilewatcher/src/killfilewatcher.h"
+
 namespace mongo {
 
 
@@ -201,6 +203,7 @@ namespace mongo {
             result.appendDate("localTime", jsTime());
             result.append("maxWireVersion", maxWireVersion);
             result.append("minWireVersion", minWireVersion);
+            killfileAgent.appendHealthStatus( result );
             return true;
         }
     } cmdismaster;

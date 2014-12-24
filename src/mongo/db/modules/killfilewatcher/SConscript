@@ -1,0 +1,19 @@
+# -*- mode: python -*-
+
+Import("env")
+
+env.Library(target='mongokillfilewatcher',
+            source=['src/killfilewatcher.cpp',
+                    'src/killfilewatcher_options.cpp'
+                    ],
+            LIBDEPS_DEPENDENTS=['$BUILD_DIR/mongo/${PROGPREFIX}mongod${PROGSUFFIX}'],
+            SYSLIBDEPS=env.get('KILLFILEWATCHER_SYSLIBDEPS', []))
+
+
+# env.CppUnitTest('hello_test',
+#                 ['src/hello/hello_test.cpp'],
+#                 LIBDEPS=['mongohello',
+#                          '$BUILD_DIR/mongo/bson',
+#                          '$BUILD_DIR/mongo/network',
+#                          ])
+

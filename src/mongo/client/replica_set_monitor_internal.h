@@ -62,6 +62,8 @@ namespace mongo {
         // remaining fields aren't in isMaster reply, but are known to caller.
         HostAndPort host;
         int64_t latencyMicros; // ignored if negative
+        int healthCheckFailCount;
+        std::string healthMsg;
     };
 
     struct ReplicaSetMonitor::SetState {
@@ -111,6 +113,8 @@ namespace mongo {
             bool isMaster; // implies isUp
             int64_t latencyMicros; // unknownLatency if unknown
             BSONObj tags; // owned
+            int healthCheckFailCount;
+            std::string healthMsg;
         };
         typedef std::vector<Node> Nodes;
 
